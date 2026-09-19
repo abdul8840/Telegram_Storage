@@ -79,7 +79,7 @@ export function useFileActions() {
   );
 
   const transcode = useCallback(
-    async (file, maxDimension = 1920) => {
+    async (file, maxDimension) => {
       try {
         await Files.transcode(file.id, maxDimension);
         await useJobs.getState().load();

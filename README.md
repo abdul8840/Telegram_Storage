@@ -153,6 +153,9 @@ Everything lives in `.env` (see [`.env.example`](.env.example) for the annotated
 | `TG_UPLOAD_WORKERS` / `TG_UPLOAD_PART_KB` | `3` / `512` | Telegram upload tuning |
 | `FFMPEG_PATH` / `FFPROBE_PATH` | auto | Bundled npm binaries are detected automatically |
 | `ENABLE_TRANSCODE` | `1` | Set `0` to disable HEVC → H.264 conversion |
+| `TRANSCODE_PRESET` / `TRANSCODE_CRF` | `superfast` / `24` | H.264 speed and quality trade-off |
+| `TRANSCODE_MAX_DIMENSION` | `1920` | Downscale browser copies to at most 1080p |
+| `MAX_CONCURRENT_TRANSCODES` | `1` | Avoid competing ffmpeg jobs on limited CPUs |
 | `MAX_UPLOAD_SIZE` | `4294967296` | 4 GB cap (Telegram Premium) |
 | `UPLOAD_CHUNK_SIZE` | `8388608` | Client chunk size |
 | `TRASH_AUTO_PURGE_DAYS` | `30` | Trash retention |

@@ -1,7 +1,7 @@
 /**
  * Database bootstrap + collection registry.
  *
- *   MONGODB_URI set  → MongoDB driver (production / Atlas)
+ *   MONGODB_URI set   → MongoDB driver (production / Atlas); fail fast if unavailable
  *   MONGODB_URI empty → embedded NeDB driver in ./data/db (zero-config dev)
  *
  * Both drivers implement the identical collection surface, so the rest of the
@@ -55,8 +55,11 @@ export async function initDb() {
       driver = await createMongoDriver({ uri: config.db.uri, name: config.db.name });
       log.info(`connected to MongoDB database "${config.db.name}"`);
     } catch (err) {
-      log.error('MongoDB connection failed — falling back to embedded database:', err.message);
-      driver = await createEmbeddedDriver({ embeddedPath: config.db.embeddedPath });
+      // A configured MongoDB URI is an explicit choice. Falling back here can
+      // split user data between MongoDB and a machine-local database without
+      // the operator noticing, especially on ephemeral hosting such as Render.
+      log.error('MongoDB connection failed — startup aborted:', err.message);
+      throw err;
     }
   } else {
     driver = await createEmbeddedDriver({ embeddedPath: config.db.embeddedPath });

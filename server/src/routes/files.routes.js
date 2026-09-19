@@ -1,6 +1,7 @@
 /** Library routes: listing, detail, streaming, metadata edits and bulk actions. */
 import express from 'express';
 import { z } from 'zod';
+import config from '../config.js';
 import { db } from '../db/index.js';
 import { ApiError, asyncHandler } from '../lib/errors.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -207,7 +208,10 @@ router.get(
 router.post(
   '/:id/transcode',
   asyncHandler(async (req, res) => {
-    const maxDimension = Number(req.body?.maxDimension) || 3840;
+    const requestedDimension = Number(req.body?.maxDimension);
+    const maxDimension = Number.isFinite(requestedDimension) && requestedDimension > 0
+      ? Math.max(720, Math.min(3840, Math.round(requestedDimension)))
+      : config.media.transcodeMaxDimension;
     const job = await enqueueTranscode({ userId: req.userId, fileId: req.params.id, maxDimension });
     res.status(202).json({ job });
   }),

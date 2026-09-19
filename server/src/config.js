@@ -3,8 +3,9 @@
  *
  * Every value can be overridden with environment variables (see /.env.example).
  * The app can boot without MongoDB configuration by using an embedded
- * database. File uploads always require a connected Telegram account; there is
- * no permanent local-disk fallback.
+ * database. When MONGODB_URI is provided, MongoDB is required and a connection
+ * failure stops startup. File uploads always require a connected Telegram
+ * account; there is no permanent local-disk fallback.
  */
 import path from 'node:path';
 import fs from 'node:fs';
@@ -28,6 +29,7 @@ const int = (value, fallback) => {
   const n = parseInt(value, 10);
   return Number.isFinite(n) ? n : fallback;
 };
+const oneOf = (value, allowed, fallback) => (allowed.includes(String(value || '').toLowerCase()) ? String(value).toLowerCase() : fallback);
 const abs = (p, base = ROOT_DIR) => (p ? path.resolve(base, p) : base);
 
 const dataDir = abs(process.env.DATA_DIR || './data');
@@ -85,6 +87,15 @@ export const config = {
     ffmpegPath: process.env.FFMPEG_PATH || '',
     ffprobePath: process.env.FFPROBE_PATH || '',
     enableTranscode: bool(process.env.ENABLE_TRANSCODE, true),
+    // Fast browser-preview copies: the untouched original remains in Telegram.
+    transcodePreset: oneOf(
+      process.env.TRANSCODE_PRESET,
+      ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium'],
+      'superfast',
+    ),
+    transcodeCrf: Math.max(18, Math.min(32, int(process.env.TRANSCODE_CRF, 24))),
+    transcodeMaxDimension: Math.max(720, Math.min(3840, int(process.env.TRANSCODE_MAX_DIMENSION, 1920))),
+    maxConcurrentTranscodes: Math.max(1, Math.min(4, int(process.env.MAX_CONCURRENT_TRANSCODES, 1))),
     thumbPath: abs(process.env.THUMB_PATH || './data/thumbs'),
     thumbWidth: int(process.env.THUMB_WIDTH, 480),
     lqipWidth: int(process.env.LQIP_WIDTH, 24),

@@ -231,7 +231,10 @@ export function SettingsPage() {
                 <div className="setting-main">
                   <div className="setting-name">Video transcoding (HEVC → H.264)</div>
                   <div className="setting-desc">
-                    Makes iPhone recordings playable in every browser. The original stays untouched.
+                    Makes iPhone recordings playable in every browser. The original stays untouched.{' '}
+                    {media?.transcode
+                      ? `Copies are limited to ${media.transcodeMaxDimension || 1920}px using the ${media.transcodePreset || 'fast'} preset; ${media.maxConcurrentTranscodes || 1} conversion${(media.maxConcurrentTranscodes || 1) === 1 ? '' : 's'} at a time.`
+                      : ''}
                   </div>
                 </div>
                 <StatusBadge ok={media?.transcode} okLabel="Enabled" badLabel="Disabled" />

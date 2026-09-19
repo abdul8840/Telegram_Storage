@@ -22,6 +22,25 @@ import { ingestLocalFile, publicFile } from './uploadManager.js';
 const log = createLogger('jobs');
 const now = () => new Date().toISOString();
 const controllers = new Map();
+const transcodeQueue = [];
+let activeTranscodes = 0;
+
+function pumpTranscodeQueue() {
+  while (activeTranscodes < config.media.maxConcurrentTranscodes && transcodeQueue.length) {
+    const job = transcodeQueue.shift();
+    activeTranscodes += 1;
+    void (async () => {
+      // A queued job may have been cancelled before a worker became available.
+      const current = await db.jobs.findOne({ _id: job._id });
+      if (current?.status === 'queued') await runTranscode(current);
+    })()
+      .catch((err) => log.error(`transcode job ${job._id} crashed: ${err.message}`))
+      .finally(() => {
+        activeTranscodes -= 1;
+        pumpTranscodeQueue();
+      });
+  }
+}
 
 function emit(userId, event, payload) {
   userBus(String(userId)).emit(event, payload);
@@ -45,7 +64,7 @@ export async function listJobs(userId, { limit = 25 } = {}) {
  * Creates a browser-playable H.264/AAC MP4 copy of a video and stores it in the
  * drive next to the original (which is never modified).
  */
-export async function enqueueTranscode({ userId, fileId, maxDimension = 3840, replace = false }) {
+export async function enqueueTranscode({ userId, fileId, maxDimension = config.media.transcodeMaxDimension, replace = false }) {
   const caps = await getCapabilities();
   if (!caps.transcode) {
     throw ApiError.badRequest('Transcoding needs ffmpeg on the server. Install ffmpeg (or set FFMPEG_PATH) and ENABLE_TRANSCODE=1.');
@@ -78,7 +97,8 @@ export async function enqueueTranscode({ userId, fileId, maxDimension = 3840, re
   await db.jobs.insertOne(job);
   emit(userId, 'job:created', { job });
 
-  void runTranscode(job).catch((err) => log.error(`transcode job ${job._id} crashed: ${err.message}`));
+  transcodeQueue.push(job);
+  pumpTranscodeQueue();
   return job;
 }
 

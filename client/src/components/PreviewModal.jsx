@@ -74,16 +74,25 @@ export function MediaStage({ doc, src, onConvert, onDownload, canConvert = true,
     case 'video':
     case 'video-transcode':
       return publicMode ? (
-        doc.previewKind === 'video' ? (
-          <video className="preview-video" src={src.stream} poster={src.thumbnail} controls autoPlay playsInline preload="metadata" />
+        !broken ? (
+          <video
+            className="preview-video"
+            src={src.stream}
+            poster={src.thumbnail}
+            controls
+            autoPlay
+            playsInline
+            preload="metadata"
+            onError={() => setBroken(true)}
+          />
         ) : (
           <div className="hevc-banner">
             <Clapperboard />
             <div style={{ flex: '1 1 240px' }}>
-              <div className="callout-title" style={{ fontSize: 13.5 }}>HEVC video — browsers cannot play this directly</div>
+              <div className="callout-title" style={{ fontSize: 13.5 }}>This browser could not decode the video</div>
               <p className="small" style={{ marginTop: 5, color: 'var(--text-soft)' }}>
-                The owner can convert it to H.264 in one click. Meanwhile you can download it and play it in any player
-                (VLC, QuickTime, Infuse).
+                HEVC support depends on the browser, operating system and installed codecs. The owner can make an H.264
+                compatibility copy, or you can download the original and play it in VLC, QuickTime or Infuse.
               </p>
               <a className="btn btn-primary btn-sm" style={{ marginTop: 12 }} href={src.download || src.stream} download>
                 <Download /> Download {formatBytes(doc.size || 0)}

@@ -550,17 +550,25 @@ export async function ensureWebPreview({ localPath, fileId, kind, name = '', mim
  * @param {Function} opts.onProgress ({percent, seconds, speed}) => void
  * @param {AbortSignal} opts.signal
  */
-export async function transcodeToH264({ inputPath, outputPath, media = {}, onProgress, signal, maxDimension = 3840 }) {
+export async function transcodeToH264({
+  inputPath,
+  outputPath,
+  media = {},
+  onProgress,
+  signal,
+  maxDimension = config.media.transcodeMaxDimension,
+}) {
   const caps = await getCapabilities();
   if (!caps.transcode) throw new Error('Transcoding is unavailable: install ffmpeg (or set FFMPEG_PATH) and ENABLE_TRANSCODE=1');
 
   const duration = Number(media?.duration) || 0;
   await fsp.mkdir(path.dirname(outputPath), { recursive: true });
 
-  const videoFilter = [
-    `scale='min(${maxDimension},iw)':'min(${maxDimension},ih)':force_original_aspect_ratio=decrease`,
-    'format=yuv420p',
-  ].join(',');
+  const sourceLargestDimension = Math.max(Number(media?.width) || 0, Number(media?.height) || 0);
+  const videoFilter = sourceLargestDimension > maxDimension || !sourceLargestDimension
+    ? [`scale='min(${maxDimension},iw)':'min(${maxDimension},ih)':force_original_aspect_ratio=decrease`, 'format=yuv420p'].join(',')
+    : 'format=yuv420p';
+  const copyAudio = String(media?.acodec || '').toLowerCase() === 'aac';
 
   const args = [
     '-nostdin',
@@ -574,9 +582,9 @@ export async function transcodeToH264({ inputPath, outputPath, media = {}, onPro
     '-c:v',
     'libx264',
     '-preset',
-    'veryfast',
+    config.media.transcodePreset,
     '-crf',
-    '22',
+    String(config.media.transcodeCrf),
     '-profile:v',
     'high',
     '-level',
@@ -586,11 +594,8 @@ export async function transcodeToH264({ inputPath, outputPath, media = {}, onPro
     '-vf',
     videoFilter,
     '-c:a',
-    'aac',
-    '-b:a',
-    '160k',
-    '-ac',
-    '2',
+    copyAudio ? 'copy' : 'aac',
+    ...(copyAudio ? [] : ['-b:a', '128k', '-ac', '2']),
     '-movflags',
     '+faststart',
     '-progress',

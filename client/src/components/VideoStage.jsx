@@ -1,9 +1,10 @@
 /**
  * Video playback stage.
  *
- * iPhone recordings are HEVC/H.265 inside a .mov container, which most
- * browsers cannot decode. This component:
- *   1. plays the file natively when it can,
+ * iPhone recordings are commonly HEVC/H.265 inside a .mov container. Browser
+ * support depends on the browser, operating system and installed codec. This
+ * component:
+ *   1. detects and uses native HEVC playback when available,
  *   2. offers a one-click server-side convert to H.264 MP4 when it cannot,
  *   3. streams live job progress while the convert runs,
  *   4. automatically switches to the browser-friendly copy when it is ready.
@@ -24,6 +25,16 @@ import { useUi } from '../store/ui.js';
 import { Progress, Spinner } from './common.jsx';
 import { formatBytes } from '../lib/format.js';
 
+function browserAdvertisesHevc() {
+  if (typeof document === 'undefined') return false;
+  const probe = document.createElement('video');
+  return [
+    'video/mp4; codecs="hvc1"',
+    'video/mp4; codecs="hev1"',
+    'video/quicktime; codecs="hvc1"',
+  ].some((type) => Boolean(probe.canPlayType?.(type)));
+}
+
 export function VideoStage({ file, onConvert, onDownload }) {
   const capabilities = useDrive((s) => s.capabilities);
   const jobs = useJobs((s) => s.jobs);
@@ -33,6 +44,7 @@ export function VideoStage({ file, onConvert, onDownload }) {
   const [doc, setDoc] = useState(file);
   const [playError, setPlayError] = useState(false);
   const [forceTry, setForceTry] = useState(false);
+  const [nativeHevc, setNativeHevc] = useState(false);
   const videoRef = useRef(null);
 
   const derivativeKey = useMemo(() => (file.derivatives || []).join(','), [file.derivatives]);
@@ -42,6 +54,12 @@ export function VideoStage({ file, onConvert, onDownload }) {
   useEffect(() => {
     setDoc((current) => (current.id === file.id && current.updatedAt === file.updatedAt ? current : file));
   }, [file]);
+
+  useEffect(() => {
+    setNativeHevc(file.hevc ? browserAdvertisesHevc() : false);
+    setPlayError(false);
+    setForceTry(false);
+  }, [file.id, file.hevc]);
 
   // Load derivative documents once, and pick the browser-friendly one.
   useEffect(() => {
@@ -96,7 +114,8 @@ export function VideoStage({ file, onConvert, onDownload }) {
     })();
   }, [finishedJob, toast]);
 
-  const playable = doc.previewKind === 'video' && !playError;
+  const isOriginalHevc = doc.id === file.id && !!file.hevc;
+  const playable = (doc.previewKind === 'video' || (isOriginalHevc && nativeHevc)) && !playError;
   const showConvertPrompt = !playable;
   const media = doc.media || {};
 
@@ -124,7 +143,7 @@ export function VideoStage({ file, onConvert, onDownload }) {
                 }}
                 title={option.name}
               >
-                {friendly ? <Play size={12} /> : <Film size={12} />}
+                {friendly || (isOriginal && nativeHevc) ? <Play size={12} /> : <Film size={12} />}
                 {isOriginal ? `Original${file.hevc ? ' (HEVC)' : ''}` : 'H.264 copy'}
                 <span className="tiny faint">{formatBytes(option.size || 0)}</span>
               </button>
@@ -179,14 +198,14 @@ export function VideoStage({ file, onConvert, onDownload }) {
           </span>
           <div style={{ flex: '1 1 240px', minWidth: 0 }}>
             <div className="callout-title" style={{ fontSize: 13.5 }}>
-              {playError ? 'Your browser could not play this video' : 'HEVC (H.265) video — not playable in browsers'}
+              {playError ? 'Your browser could not decode this HEVC video' : 'HEVC (H.265) needs browser codec support'}
             </div>
             <p className="small" style={{ marginTop: 5, color: 'var(--text-soft)' }}>
               {doc.name}
               {media.vcodec ? ` · ${media.vcodec}` : ''}
               {media.width ? ` · ${media.width}×${media.height}` : ''}
-              {media.duration ? ` · ${Math.round(media.duration)}s` : ''}. Convert it once and the H.264 MP4 copy plays
-              instantly on any device, keeps the original safe, and stays in your ZoZoCloud storage.
+              {media.duration ? ` · ${Math.round(media.duration)}s` : ''}. This browser did not advertise compatible
+              HEVC playback. You can still try the original, or make an H.264 copy that works consistently across browsers.
             </p>
             <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
               {canTranscode ? (
