@@ -14,9 +14,9 @@ import { createLogger } from '../lib/logger.js';
 import { ApiError } from '../lib/errors.js';
 import { userBus } from '../lib/events.js';
 import { randomId, randomHex } from '../lib/crypto.js';
-import { splitName, sanitizeFileName, formatBytes } from '../lib/fileTypes.js';
+import { splitName, sanitizeFileName, formatBytes, videoCompatibility } from '../lib/fileTypes.js';
 import { getProviderForFile } from '../storage/index.js';
-import { getCapabilities, transcodeToH264, probe, ensureWebPreview, generateThumbnails } from './media.js';
+import { getCapabilities, remuxToMp4, transcodeToH264, probe, ensureWebPreview, generateThumbnails } from './media.js';
 import { ingestLocalFile, publicFile } from './uploadManager.js';
 
 const log = createLogger('jobs');
@@ -72,7 +72,7 @@ export async function enqueueTranscode({ userId, fileId, maxDimension = config.m
   const file = await db.files.findOne({ _id: fileId, userId });
   if (!file) throw ApiError.notFound('File not found');
   if (file.status !== 'ready') throw ApiError.badRequest('This file is not ready yet');
-  if (file.kind !== 'video' && file.kind !== 'audio') throw ApiError.badRequest('Only video and audio files can be transcoded');
+  if (file.kind !== 'video') throw ApiError.badRequest('Only video files can be converted');
 
   const running = await db.jobs.findOne({ userId, fileId, type: 'transcode', status: { $in: ['queued', 'running'] } });
   if (running) return running;
@@ -87,7 +87,7 @@ export async function enqueueTranscode({ userId, fileId, maxDimension = config.m
     phase: 'queued',
     name: file.name,
     size: file.size,
-    options: { maxDimension, replace },
+    options: { maxDimension, replace, strategy: videoCompatibility(file.name, file.media || {}).strategy || 'transcode' },
     output: null,
     error: null,
     createdAt: now(),
@@ -107,6 +107,7 @@ async function runTranscode(job) {
   const controller = new AbortController();
   controllers.set(jobId, controller);
   const workDir = path.join(config.paths.tmp, `transcode-${jobId}-${randomHex(3)}`);
+  let source = null;
   await fsp.mkdir(workDir, { recursive: true });
 
   try {
@@ -118,7 +119,7 @@ async function runTranscode(job) {
     const provider = getProviderForFile(file);
 
     // 1) Materialise the source locally (Telegram files are streamed down).
-    const source = await provider.openLocal({
+    source = await provider.openLocal({
       userId,
       storage: file.storage,
       size: file.size,
@@ -140,28 +141,30 @@ async function runTranscode(job) {
       /* keep whatever we had */
     }
 
+    const compatibility = videoCompatibility(file.name, media || {});
+    const strategy = compatibility.strategy === 'remux' ? 'remux' : 'transcode';
     const { base } = splitName(file.name);
-    const outName = sanitizeFileName(`${base} (H.264).mp4`);
+    const outName = sanitizeFileName(`${base} (${strategy === 'remux' ? 'Web MP4' : 'H.264'}).mp4`);
     const outPath = path.join(workDir, outName);
+    const processingPhase = strategy === 'remux' ? 'remuxing' : 'transcoding';
 
-    await update(jobId, { phase: 'transcoding', progress: 16 });
-    emit(userId, 'job:progress', { jobId, fileId, phase: 'transcoding', percent: 16, name: job.name });
+    await update(jobId, { phase: processingPhase, progress: 16, options: { ...(job.options || {}), strategy } });
+    emit(userId, 'job:progress', { jobId, fileId, phase: processingPhase, percent: 16, name: job.name });
 
-    // 3) ffmpeg → H.264/AAC MP4 with faststart (seekable from the first byte).
-    const result = await transcodeToH264({
+    // 3) ffmpeg → browser-compatible MP4 with faststart (seekable immediately).
+    const processor = strategy === 'remux' ? remuxToMp4 : transcodeToH264;
+    const result = await processor({
       inputPath: source.path,
       outputPath: outPath,
       media: media || {},
       signal: controller.signal,
-      maxDimension: job.options?.maxDimension || 3840,
+      ...(strategy === 'transcode' ? { maxDimension: job.options?.maxDimension || config.media.transcodeMaxDimension } : {}),
       onProgress: ({ percent, speed }) => {
         const overall = Math.max(16, Math.min(92, 16 + Math.round((percent || 0) * 0.76)));
         update(jobId, { progress: overall }).catch(() => {});
-        emit(userId, 'job:progress', { jobId, fileId, phase: 'transcoding', percent: overall, speed, name: job.name });
+        emit(userId, 'job:progress', { jobId, fileId, phase: processingPhase, percent: overall, speed, name: job.name });
       },
     });
-
-    await source.cleanup?.();
 
     if (controller.signal.aborted) throw new Error('Cancelled');
 
@@ -191,10 +194,11 @@ async function runTranscode(job) {
         size: result.size,
         originalSize: file.size,
         savedBytes: (file.size || 0) - result.size,
+        strategy,
       },
     });
-    emit(userId, 'job:done', { jobId, fileId, output: { fileId: created._id, name: outName, size: result.size }, name: job.name });
-    log.info(`transcoded ${file.name} → ${outName} (${formatBytes(file.size)} → ${formatBytes(result.size)})`);
+    emit(userId, 'job:done', { jobId, fileId, output: { fileId: created._id, name: outName, size: result.size, strategy }, name: job.name });
+    log.info(`${strategy === 'remux' ? 'remuxed' : 'transcoded'} ${file.name} → ${outName} (${formatBytes(file.size)} → ${formatBytes(result.size)})`);
     return { jobId };
   } catch (err) {
     const cancelled = controller.signal.aborted || /cancel/i.test(err?.message || '');
@@ -209,6 +213,7 @@ async function runTranscode(job) {
     return null;
   } finally {
     controllers.delete(jobId);
+    if (source?.cleanup) await source.cleanup().catch(() => {});
     await fsp.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }

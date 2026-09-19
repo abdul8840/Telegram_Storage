@@ -37,6 +37,9 @@ Full-stack **MERN** app: MongoDB (with a zero-config embedded fallback), Express
 - 📱 **iPhone HEVC handled properly**: the server probes every upload with ffprobe, flags H.265/HVC1 files, and offers
   a **one-click server-side transcode to H.264 MP4** (faststart, seekable). The original is kept; the player switches
   to the browser-friendly copy automatically when it is ready.
+- 🎞️ **Container-aware playback**: MKV, MP4, MOV and WebM are evaluated separately from their video/audio codecs.
+  MKV is attempted natively first on the current browser/device; if that fails, H.264-in-MKV can be remuxed to MP4
+  without re-encoding while incompatible codecs use the conversion queue.
 - 🖼 Thumbnails + 24px **LQIP blur-up placeholders** for photos *and* videos, HEIC → web preview renditions.
 - ▶️ In-browser preview for video, audio, images, PDF, text/code and Office documents (download path).
 
@@ -106,10 +109,13 @@ Telegram confirms the file. They are never retained as the permanent storage cop
 | --- | --- |
 | Upload | The `.mov` is streamed in 8 MB chunks, assembled, then pushed to Telegram. |
 | Probe | `ffprobe` records codec (`hevc`/`hvc1`), resolution, duration, fps, bitrate, rotation. |
-| Flag | The API returns `previewKind: "video-transcode"`, `hevc: true`, `needsTranscode: true`. |
-| UI | The video card shows an **HEVC** badge; the player explains that browsers cannot decode H.265 and offers **Convert & play**. |
+| Classify | Container, video codec and audio codec are evaluated separately. MP4/MOV HEVC is conditional; MKV uses a native platform attempt. |
+| UI | The real MKV stream opens directly first. Conversion is offered only after that browser/device reports a playback error. |
 | Convert | A background job downloads the original, re-encodes to H.264/AAC MP4 with `+faststart`, stores it as a new file linked by `derivedFrom`, and streams progress over SSE. |
 | Play | The player auto-switches to the H.264 copy and offers a chip to flip between *Original (HEVC)* and *H.264 copy*. |
+
+If native MKV playback fails, H.264 video uses the faster remux path: ffmpeg copies the video stream into an MP4
+container and only converts audio when required. HEVC-in-MKV can still use H.264 conversion for universal playback.
 
 Browsers that *can* decode HEVC (Safari on macOS/iOS, Chrome with the HEVC extension) play the original directly —
 the UI tries native playback first and falls back to the conversion prompt on error.

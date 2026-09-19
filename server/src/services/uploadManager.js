@@ -23,7 +23,20 @@ import { createLogger } from '../lib/logger.js';
 import { ApiError } from '../lib/errors.js';
 import { userBus } from '../lib/events.js';
 import { randomId } from '../lib/crypto.js';
-import { extOf, kindOf, mimeOf, sanitizeFileName, formatBytes } from '../lib/fileTypes.js';
+import {
+  extOf,
+  kindOf,
+  mimeOf,
+  sanitizeFileName,
+  formatBytes,
+  formatDuration,
+  isHeicImage,
+  isPdf,
+  isPlayableAudio,
+  isTextPreviewable,
+  videoCompatibility,
+  KIND,
+} from '../lib/fileTypes.js';
 import { createSemaphore, clampPercent } from '../lib/concurrency.js';
 import { getProviderForUser } from '../storage/index.js';
 import { generateThumbnails, probe, ensureWebPreview, deleteThumbnails, thumbPathsFor } from './media.js';
@@ -614,6 +627,27 @@ export function publicFile(file) {
   if (!file) return null;
   const { storage, localPayloadPath, ...rest } = file;
   const thumbUrl = file.thumb?.available ? `/api/files/${file._id}/thumbnail` : null;
+  const media = file.media || {};
+  const compatibility = file.kind === KIND.VIDEO ? videoCompatibility(file.name || '', media) : null;
+  let previewKind = 'download';
+  if (file.status !== 'ready') previewKind = 'pending';
+  else if (file.kind === KIND.VIDEO) {
+    previewKind = compatibility.mode === 'native'
+      ? 'video'
+      : compatibility.mode === 'conditional'
+        ? 'video-conditional'
+        : compatibility.mode === 'attempt'
+          ? 'video-native-attempt'
+          : 'video-transcode';
+  } else if (file.kind === KIND.AUDIO) previewKind = isPlayableAudio(file.name || '', media) ? 'audio' : 'download';
+  else if (file.kind === KIND.IMAGE) {
+    if (isHeicImage(file.name || '', file.mime || '')) previewKind = file.preview?.path ? 'image-preview' : 'heic';
+    else if (['tiff', 'tif', 'dng', 'cr2', 'nef', 'arw', 'raf', 'rw2', 'bmp'].includes(extOf(file.name || ''))) {
+      previewKind = file.preview?.path ? 'image-preview' : 'download';
+    } else previewKind = 'image';
+  } else if (isPdf(file.name || '', file.mime || '')) previewKind = 'pdf';
+  else if (isTextPreviewable(file.name || '', file.mime || '')) previewKind = 'text';
+  else if (file.kind === KIND.DOC) previewKind = 'office';
   return {
     ...rest,
     id: file._id,
@@ -626,6 +660,16 @@ export function publicFile(file) {
     downloadUrl: `/api/files/${file._id}/download`,
     lqip: file.thumb?.lqip || null,
     hasThumb: !!file.thumb?.available,
+    previewKind,
+    playable: ['video', 'video-conditional', 'video-native-attempt', 'audio', 'image', 'image-preview', 'pdf', 'text'].includes(previewKind),
+    needsTranscode: previewKind === 'video-transcode',
+    hevc: !!compatibility?.hevc,
+    videoCompatibility: compatibility,
+    conversionStrategy: compatibility?.strategy || null,
+    durationText: media.duration ? formatDuration(media.duration) : null,
+    hasPreviewRendition: !!file.preview?.path,
+    hasDerivative: Array.isArray(file.derivatives) && file.derivatives.length > 0,
+    derivedFrom: file.derivedFrom || null,
   };
 }
 

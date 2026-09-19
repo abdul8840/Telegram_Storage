@@ -107,17 +107,22 @@ export function VideoStage({ file, onConvert, onDownload }) {
       setPlayError(false);
       toast({
         kind: 'success',
-        title: 'H.264 copy ready',
-        message: `${created.name} — playing the browser-friendly version`,
+        title: finishedJob?.output?.strategy === 'remux' ? 'Web MP4 ready' : 'H.264 copy ready',
+        message: `${created.name} — playing the browser-compatible version`,
         timeout: 6000,
       });
     })();
   }, [finishedJob, toast]);
 
   const isOriginalHevc = doc.id === file.id && !!file.hevc;
-  const playable = (doc.previewKind === 'video' || (isOriginalHevc && nativeHevc)) && !playError;
+  const isConditionalHevc = doc.previewKind === 'video-conditional' && isOriginalHevc;
+  const isNativeAttempt = doc.previewKind === 'video-native-attempt';
+  const playable = (doc.previewKind === 'video' || isNativeAttempt || (isConditionalHevc && nativeHevc)) && !playError;
   const showConvertPrompt = !playable;
   const media = doc.media || {};
+  const compatibility = doc.videoCompatibility || file.videoCompatibility || {};
+  const canTryOriginal = ['conditional', 'attempt'].includes(compatibility.mode) || compatibility.reasonCode !== 'container';
+  const isRemux = compatibility.strategy === 'remux';
 
   const convert = () => {
     if (onConvert) onConvert(file);
@@ -143,7 +148,7 @@ export function VideoStage({ file, onConvert, onDownload }) {
                 }}
                 title={option.name}
               >
-                {friendly || (isOriginal && nativeHevc) ? <Play size={12} /> : <Film size={12} />}
+                {friendly || (isOriginal && file.previewKind === 'video-conditional' && nativeHevc) ? <Play size={12} /> : <Film size={12} />}
                 {isOriginal ? `Original${file.hevc ? ' (HEVC)' : ''}` : 'H.264 copy'}
                 <span className="tiny faint">{formatBytes(option.size || 0)}</span>
               </button>
@@ -180,6 +185,8 @@ export function VideoStage({ file, onConvert, onDownload }) {
             <p className="tiny faint" style={{ marginTop: 6 }}>
               {job.phase === 'downloading'
                 ? 'Fetching the original from Telegram…'
+                : job.phase === 'remuxing'
+                  ? 'Copying the video into a browser-compatible MP4 container…'
                 : job.phase === 'transcoding'
                   ? 'Re-encoding video and audio…'
                   : job.phase === 'saving'
@@ -198,28 +205,36 @@ export function VideoStage({ file, onConvert, onDownload }) {
           </span>
           <div style={{ flex: '1 1 240px', minWidth: 0 }}>
             <div className="callout-title" style={{ fontSize: 13.5 }}>
-              {playError ? 'Your browser could not decode this HEVC video' : 'HEVC (H.265) needs browser codec support'}
+              {playError
+                ? `Your browser could not play this ${compatibility.containerLabel || 'video'}`
+                : compatibility.reasonCode === 'container'
+                  ? `${compatibility.containerLabel || 'This container'} needs a browser-compatible copy`
+                  : file.hevc
+                    ? 'HEVC (H.265) needs browser codec support'
+                    : 'This video needs a browser-compatible copy'}
             </div>
             <p className="small" style={{ marginTop: 5, color: 'var(--text-soft)' }}>
               {doc.name}
               {media.vcodec ? ` · ${media.vcodec}` : ''}
               {media.width ? ` · ${media.width}×${media.height}` : ''}
-              {media.duration ? ` · ${Math.round(media.duration)}s` : ''}. This browser did not advertise compatible
-              HEVC playback. You can still try the original, or make an H.264 copy that works consistently across browsers.
+              {media.duration ? ` · ${Math.round(media.duration)}s` : ''}.{' '}
+              {compatibility.reason || 'The container or codec is not supported reliably by this browser.'}
             </p>
             <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
               {canTranscode ? (
                 <button className="btn btn-primary btn-sm" onClick={convert}>
-                  <Sparkles /> Convert &amp; play
+                  <Sparkles /> {isRemux ? 'Prepare MP4 & play' : 'Convert to H.264 & play'}
                 </button>
               ) : (
                 <span className="badge badge-warn">
                   <AlertTriangle size={12} /> ffmpeg unavailable on this server
                 </span>
               )}
-              <button className="btn btn-outline btn-sm" onClick={() => setForceTry(true)}>
-                <Play /> Try anyway
-              </button>
+              {canTryOriginal ? (
+                <button className="btn btn-outline btn-sm" onClick={() => setForceTry(true)}>
+                  <Play /> Try original
+                </button>
+              ) : null}
               <button className="btn btn-ghost btn-sm" onClick={() => (onDownload ? onDownload(doc) : Files.get(doc.id))}>
                 <Download /> Download
               </button>

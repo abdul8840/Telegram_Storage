@@ -231,7 +231,11 @@ export function UploadDock() {
                 <span className="dock-item-meta">
                   <Spinner size={12} />
                   <span className="ellipsis">
-                    {job.type === 'transcode' ? 'Making an H.264 copy that plays everywhere' : 'Preparing preview'}
+                    {job.type === 'transcode'
+                      ? job.phase === 'remuxing' || job.options?.strategy === 'remux'
+                        ? 'Preparing a browser MP4 without re-encoding video'
+                        : 'Making an H.264 copy that plays everywhere'
+                      : 'Preparing preview'}
                     {job.progress ? ` · ${Math.round(job.progress)}%` : ''}
                   </span>
                 </span>

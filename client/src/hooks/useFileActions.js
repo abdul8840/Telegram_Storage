@@ -85,8 +85,10 @@ export function useFileActions() {
         await useJobs.getState().load();
         toast({
           kind: 'info',
-          title: 'Conversion started',
-          message: `${file.name} → H.264 MP4. You can keep using the drive; we'll notify you.`,
+          title: file.conversionStrategy === 'remux' ? 'Preparing MP4' : 'Conversion started',
+          message: file.conversionStrategy === 'remux'
+            ? `${file.name} → Web MP4 without re-encoding the video. We'll notify you when it is saved.`
+            : `${file.name} → H.264 MP4. You can keep using the drive; we'll notify you.`,
           timeout: 6000,
         });
       } catch (err) {

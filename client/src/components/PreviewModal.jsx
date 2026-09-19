@@ -72,9 +72,11 @@ export function MediaStage({ doc, src, onConvert, onDownload, canConvert = true,
 
   switch (kind) {
     case 'video':
+    case 'video-conditional':
+    case 'video-native-attempt':
     case 'video-transcode':
       return publicMode ? (
-        !broken ? (
+        doc.previewKind !== 'video-transcode' && !broken ? (
           <video
             className="preview-video"
             src={src.stream}
@@ -89,10 +91,12 @@ export function MediaStage({ doc, src, onConvert, onDownload, canConvert = true,
           <div className="hevc-banner">
             <Clapperboard />
             <div style={{ flex: '1 1 240px' }}>
-              <div className="callout-title" style={{ fontSize: 13.5 }}>This browser could not decode the video</div>
+              <div className="callout-title" style={{ fontSize: 13.5 }}>
+                {doc.videoCompatibility?.containerLabel || 'This video'} is not directly playable here
+              </div>
               <p className="small" style={{ marginTop: 5, color: 'var(--text-soft)' }}>
-                HEVC support depends on the browser, operating system and installed codecs. The owner can make an H.264
-                compatibility copy, or you can download the original and play it in VLC, QuickTime or Infuse.
+                {doc.videoCompatibility?.reason || 'The container or codec is not supported by this browser.'} The owner
+                can make a browser-compatible MP4, or you can download the original and play it in VLC or another desktop player.
               </p>
               <a className="btn btn-primary btn-sm" style={{ marginTop: 12 }} href={src.download || src.stream} download>
                 <Download /> Download {formatBytes(doc.size || 0)}
@@ -258,6 +262,7 @@ function DetailRows({ doc }) {
     ['Size', formatBytes(doc.size || 0)],
     media.width && media.height ? ['Dimensions', `${media.width} × ${media.height}`] : null,
     media.duration ? ['Duration', formatDuration(media.duration)] : null,
+    doc.videoCompatibility?.containerLabel ? ['Container', doc.videoCompatibility.containerLabel] : null,
     media.vcodec ? ['Video codec', media.vcodec] : null,
     media.acodec ? ['Audio codec', media.acodec] : null,
     media.fps ? ['Frame rate', `${Math.round(media.fps * 10) / 10} fps`] : null,
@@ -265,6 +270,7 @@ function DetailRows({ doc }) {
     media.codecTag ? ['Codec tag', media.codecTag] : null,
     media.pixFmt ? ['Pixel format', media.pixFmt] : null,
     media.channels ? ['Audio channels', String(media.channels)] : null,
+    doc.videoCompatibility?.reason ? ['Browser playback', doc.videoCompatibility.reason] : null,
     doc.mime ? ['MIME', doc.mime] : null,
     ['Added', formatDateTime(doc.createdAt)],
     doc.updatedAt ? ['Updated', formatDate(doc.updatedAt)] : null,
@@ -399,7 +405,9 @@ export function PreviewModal() {
         </div>
 
         {doc?.hevc ? <span className="badge badge-violet">HEVC</span> : null}
-        {doc?.needsTranscode ? <span className="badge badge-warn">Needs convert</span> : null}
+        {doc?.needsTranscode ? (
+          <span className="badge badge-warn">{doc.conversionStrategy === 'remux' ? 'Needs MP4' : 'Needs convert'}</span>
+        ) : null}
 
         <div className="preview-actions">
           {total > 1 ? (

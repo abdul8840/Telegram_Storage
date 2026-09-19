@@ -166,10 +166,10 @@ export function SharedPage() {
               <div className="callout callout-warn">
                 <Clapperboard />
                 <div>
-                  <div className="callout-title">This video is HEVC (H.265)</div>
+                  <div className="callout-title">A browser-compatible copy is needed</div>
                   <p className="small" style={{ marginTop: 4 }}>
-                    Most browsers cannot decode it inline. Download it and play in VLC, QuickTime or Infuse — or ask the
-                    owner to convert it to H.264 for instant browser playback.
+                    {file.videoCompatibility?.reason || 'The video container or codec is not supported by this browser.'}{' '}
+                    Download the original for VLC, or ask the owner to prepare an MP4 copy.
                   </p>
                 </div>
               </div>

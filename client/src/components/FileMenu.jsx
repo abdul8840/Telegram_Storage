@@ -32,7 +32,7 @@ export function useFileMenuItems(files, { onClose } = {}) {
     const anyFailed = list.some((f) => f.status === 'failed');
     const anyTrashed = list.some((f) => f.trashed);
     const anyStarred = list.some((f) => f.starred);
-    const anyTranscodable = list.some((f) => f.needsTranscode || (f.kind === 'video' && f.status === 'ready'));
+    const anyTranscodable = list.some((f) => f.needsTranscode && f.status === 'ready');
     const anyReady = list.some((f) => f.status === 'ready');
 
     const items = [];
@@ -70,9 +70,9 @@ export function useFileMenuItems(files, { onClose } = {}) {
       if (anyTranscodable) {
         items.push({ sep: true });
         items.push({
-          label: single?.needsTranscode ? 'Convert to MP4 (H.264)' : 'Convert to MP4 (H.264)',
+          label: single?.conversionStrategy === 'remux' ? 'Prepare browser MP4' : 'Convert to MP4 (H.264)',
           icon: Clapperboard,
-          onClick: () => list.filter((f) => f.kind === 'video').forEach((f) => actions.transcode(f)),
+          onClick: () => list.filter((f) => f.needsTranscode).forEach((f) => actions.transcode(f)),
         });
       }
       if (single) {

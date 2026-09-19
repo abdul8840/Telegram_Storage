@@ -72,21 +72,97 @@ export function mimeOf(name = '', fallback = '') {
 }
 
 /** Formats that browsers can generally play natively inside <video>. */
-const WEB_VIDEO_EXTS = new Set(['mp4', 'm4v', 'webm', 'ogv', 'mov']);
-const WEB_VIDEO_CODECS = new Set(['h264', 'avc1', 'avc', 'vp8', 'vp9', 'av1']);
+const MP4_VIDEO_EXTS = new Set(['mp4', 'm4v', 'mov']);
+const H264_CODECS = ['h264', 'avc1', 'avc'];
+const HEVC_CODECS = ['hevc', 'h265', 'hvc1', 'hev1'];
 const WEB_AUDIO_EXTS = new Set(['mp3', 'wav', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'flac', 'webm']);
 
-export function isWebPlayableVideo(name, media = {}) {
+const includesCodec = (value, names) => names.some((codec) => String(value || '').toLowerCase().includes(codec));
+
+/**
+ * Describes container and codec compatibility separately. An extension such as
+ * .mkv identifies the container, not the video codec stored inside it.
+ */
+export function videoCompatibility(name, media = {}) {
   const ext = extOf(name);
-  if (!WEB_VIDEO_EXTS.has(ext)) return false;
   const vcodec = String(media?.vcodec || media?.videoCodec || '').toLowerCase();
-  if (!vcodec) return ext === 'mp4' || ext === 'webm'; // unknown → assume best case for mp4/webm
-  return [...WEB_VIDEO_CODECS].some((c) => vcodec.includes(c));
+  const acodec = String(media?.acodec || media?.audioCodec || '').toLowerCase();
+  const hevc = includesCodec(vcodec, HEVC_CODECS) || String(media?.codecTag || '').toLowerCase() === 'hvc1';
+  const h264 = includesCodec(vcodec, H264_CODECS);
+  const label = ext === 'mkv' ? 'Matroska (MKV)' : ext ? ext.toUpperCase() : 'Unknown';
+  const base = { container: ext || null, containerLabel: label, videoCodec: vcodec || null, audioCodec: acodec || null, hevc };
+
+  if (MP4_VIDEO_EXTS.has(ext)) {
+    if (hevc) {
+      return {
+        ...base,
+        mode: 'conditional',
+        strategy: 'transcode',
+        reasonCode: 'conditional-codec',
+        reason: `${label} container with HEVC video; playback depends on the browser, operating system and installed codec.`,
+      };
+    }
+    const videoOk = !vcodec || h264 || includesCodec(vcodec, ['av1']);
+    const audioOk = !acodec || includesCodec(acodec, ['aac', 'mp3', 'opus']);
+    if (videoOk && audioOk) return { ...base, mode: 'native', strategy: null, reasonCode: null, reason: null };
+    return {
+      ...base,
+      mode: 'convert',
+      strategy: h264 ? 'remux' : 'transcode',
+      reasonCode: videoOk ? 'audio-codec' : 'video-codec',
+      reason: videoOk
+        ? `${acodec || 'The audio codec'} is not reliably supported in an ${label} browser video.`
+        : `${vcodec || 'The video codec'} is not supported reliably in an ${label} browser video.`,
+    };
+  }
+
+  if (ext === 'webm') {
+    const videoOk = !vcodec || includesCodec(vcodec, ['vp8', 'vp9', 'av1']);
+    const audioOk = !acodec || includesCodec(acodec, ['opus', 'vorbis']);
+    if (videoOk && audioOk) return { ...base, mode: 'native', strategy: null, reasonCode: null, reason: null };
+    return {
+      ...base,
+      mode: 'convert',
+      strategy: 'transcode',
+      reasonCode: videoOk ? 'audio-codec' : 'video-codec',
+      reason: `This WebM contains ${vcodec || 'a video codec'}${acodec ? ` with ${acodec} audio` : ''}, which is not a browser-safe WebM combination.`,
+    };
+  }
+
+  if (ext === 'ogv' && (!vcodec || includesCodec(vcodec, ['theora']))) {
+    return { ...base, mode: 'native', strategy: null, reasonCode: null, reason: null };
+  }
+
+  if (ext === 'mkv') {
+    return {
+      ...base,
+      // Chromium/Android and other platform media stacks vary here. Let the
+      // actual HTML media element decide instead of rejecting every MKV on the
+      // server solely because of its container.
+      mode: 'attempt',
+      strategy: h264 ? 'remux' : 'transcode',
+      reasonCode: 'platform-dependent-container',
+      reason: `${label} contains ${vcodec ? `${vcodec.toUpperCase()} video` : 'video'}${acodec ? ` with ${acodec.toUpperCase()} audio` : ''}. Native playback depends on this browser and device.`,
+    };
+  }
+
+  return {
+    ...base,
+    mode: 'convert',
+    // H.264 can be copied into MP4 without re-encoding the video stream.
+    strategy: h264 ? 'remux' : 'transcode',
+    reasonCode: 'container',
+    reason: `${label} is the container${vcodec ? ` and its video stream is ${vcodec.toUpperCase()}` : ''}. This container is not supported reliably by HTML video.`,
+  };
+}
+
+export function isWebPlayableVideo(name, media = {}) {
+  return videoCompatibility(name, media).mode === 'native';
 }
 
 export function isHevc(name, media = {}) {
   const vcodec = String(media?.vcodec || media?.videoCodec || '').toLowerCase();
-  if (vcodec) return vcodec.includes('hevc') || vcodec.includes('h265') || vcodec.includes('hvc1') || vcodec.includes('hev1');
+  if (vcodec) return includesCodec(vcodec, HEVC_CODECS);
   const ext = extOf(name);
   // iPhone "High Efficiency" recordings
   return ['mov', 'm4v', 'mp4', 'hevc', 'hvc1'].includes(ext) && /hevc|hvc/i.test(String(media?.codecTag || ''));

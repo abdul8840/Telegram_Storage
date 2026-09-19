@@ -539,6 +539,96 @@ export async function ensureWebPreview({ localPath, fileId, kind, name = '', mim
 
 // ── transcoding ────────────────────────────────────────────────────────────
 
+function runFfmpegMediaJob({ ffmpegPath, args, outputPath, duration = 0, onProgress, signal, label = 'Media processing' }) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(ffmpegPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderr = '';
+    let progressBuffer = '';
+    let finished = false;
+
+    const onAbort = () => {
+      if (finished) return;
+      proc.kill('SIGTERM');
+      setTimeout(() => {
+        if (!finished) proc.kill('SIGKILL');
+      }, 2000).unref?.();
+    };
+    if (signal) {
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }
+
+    proc.stdout.on('data', (chunk) => {
+      progressBuffer += chunk.toString();
+      const records = progressBuffer.split(/\r?\n/);
+      progressBuffer = records.pop() || '';
+      let seconds = null;
+      let speed = null;
+      for (const record of records) {
+        const [key, value] = record.split('=', 2);
+        if (key === 'out_time_ms') seconds = Number(value) / 1_000_000;
+        if (key === 'speed') speed = Number(String(value).replace(/x$/, '')) || null;
+      }
+      if (seconds !== null) {
+        const percent = duration > 0 ? Math.max(0, Math.min(100, Math.round((seconds / duration) * 100))) : null;
+        onProgress?.({ percent, seconds: Math.round(seconds), speed });
+      }
+    });
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString();
+      if (stderr.length > 8000) stderr = stderr.slice(-8000);
+    });
+    proc.on('error', (err) => {
+      finished = true;
+      reject(err);
+    });
+    proc.on('close', async (code) => {
+      finished = true;
+      signal?.removeEventListener('abort', onAbort);
+      if (signal?.aborted) {
+        await fsp.unlink(outputPath).catch(() => {});
+        return reject(new Error(`${label} cancelled`));
+      }
+      if (code !== 0) {
+        await fsp.unlink(outputPath).catch(() => {});
+        return reject(new Error(`ffmpeg exited with ${code}: ${stderr.slice(-600)}`));
+      }
+      const stats = await fsp.stat(outputPath).catch(() => null);
+      if (!stats || stats.size === 0) return reject(new Error(`${label} produced an empty file`));
+      onProgress?.({ percent: 100, seconds: duration || null, speed: null, done: true });
+      return resolve({ path: outputPath, size: stats.size });
+    });
+  });
+}
+
+/** Copies a compatible H.264 video stream into MP4 without re-encoding it. */
+export async function remuxToMp4({ inputPath, outputPath, media = {}, onProgress, signal }) {
+  const caps = await getCapabilities();
+  if (!caps.ffmpeg.available) throw new Error('MP4 remuxing is unavailable: install ffmpeg or set FFMPEG_PATH');
+  const duration = Number(media?.duration) || 0;
+  const copyAudio = ['aac', 'mp3'].includes(String(media?.acodec || '').toLowerCase());
+  await fsp.mkdir(path.dirname(outputPath), { recursive: true });
+  const args = [
+    '-nostdin', '-y', '-i', inputPath,
+    '-map', '0:v:0', '-map', '0:a?',
+    '-c:v', 'copy',
+    '-c:a', copyAudio ? 'copy' : 'aac',
+    ...(copyAudio ? [] : ['-b:a', '128k', '-ac', '2']),
+    '-movflags', '+faststart',
+    '-avoid_negative_ts', 'make_zero',
+    '-progress', 'pipe:1', '-nostats', outputPath,
+  ];
+  return runFfmpegMediaJob({
+    ffmpegPath: caps.ffmpeg.path,
+    args,
+    outputPath,
+    duration,
+    onProgress,
+    signal,
+    label: 'MP4 preparation',
+  });
+}
+
 /**
  * Re-encodes a video to a browser-friendly H.264/AAC MP4 with the moov atom at
  * the front (faststart) so playback can begin and seek immediately.
@@ -604,57 +694,14 @@ export async function transcodeToH264({
     outputPath,
   ];
 
-  return new Promise((resolve, reject) => {
-    const proc = spawn(caps.ffmpeg.path, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stderr = '';
-    let finished = false;
-
-    const onAbort = () => {
-      if (finished) return;
-      proc.kill('SIGTERM');
-      setTimeout(() => {
-        if (!finished) proc.kill('SIGKILL');
-      }, 2000).unref?.();
-    };
-    if (signal) {
-      if (signal.aborted) onAbort();
-      else signal.addEventListener('abort', onAbort, { once: true });
-    }
-
-    proc.stdout.on('data', (chunk) => {
-      const text = chunk.toString();
-      const timeMatch = text.match(/out_time_ms=(\d+)/);
-      const speedMatch = text.match(/speed=\s*([\d.]+)x/);
-      if (timeMatch) {
-        const seconds = Number(timeMatch[1]) / 1_000_000;
-        const percent = duration > 0 ? Math.max(0, Math.min(100, Math.round((seconds / duration) * 100))) : null;
-        onProgress?.({ percent, seconds: Math.round(seconds), speed: speedMatch ? Number(speedMatch[1]) : null });
-      }
-    });
-    proc.stderr.on('data', (d) => {
-      stderr += d.toString();
-      if (stderr.length > 8000) stderr = stderr.slice(-8000);
-    });
-    proc.on('error', (err) => {
-      finished = true;
-      reject(err);
-    });
-    proc.on('close', async (code) => {
-      finished = true;
-      signal?.removeEventListener('abort', onAbort);
-      if (signal?.aborted) {
-        await fsp.unlink(outputPath).catch(() => {});
-        return reject(new Error('Transcode cancelled'));
-      }
-      if (code !== 0) {
-        await fsp.unlink(outputPath).catch(() => {});
-        return reject(new Error(`ffmpeg exited with ${code}: ${stderr.slice(-400)}`));
-      }
-      const stats = await fsp.stat(outputPath).catch(() => null);
-      if (!stats || stats.size === 0) return reject(new Error('Transcoding produced an empty file'));
-      onProgress?.({ percent: 100, seconds: duration || null, speed: null, done: true });
-      return resolve({ path: outputPath, size: stats.size });
-    });
+  return runFfmpegMediaJob({
+    ffmpegPath: caps.ffmpeg.path,
+    args,
+    outputPath,
+    duration,
+    onProgress,
+    signal,
+    label: 'Transcode',
   });
 }
 
@@ -663,4 +710,4 @@ export async function deleteThumbnails(fileId) {
   await Promise.all([paths.main, paths.telegram, paths.preview].map((p) => fsp.unlink(p).catch(() => {})));
 }
 
-export default { getCapabilities, probe, generateThumbnails, ensureWebPreview, transcodeToH264, heifToJpeg, thumbPathsFor, deleteThumbnails };
+export default { getCapabilities, probe, generateThumbnails, ensureWebPreview, remuxToMp4, transcodeToH264, heifToJpeg, thumbPathsFor, deleteThumbnails };

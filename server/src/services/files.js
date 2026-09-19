@@ -20,8 +20,8 @@ import {
   isPdf,
   isPlayableAudio,
   isTextPreviewable,
-  isWebPlayableVideo,
   sanitizeFileName,
+  videoCompatibility,
 } from '../lib/fileTypes.js';
 import { getProviderForFile } from '../storage/index.js';
 import { deleteThumbnails, thumbPathsFor } from './media.js';
@@ -41,7 +41,13 @@ export function previewKind(file) {
   const name = file.name || '';
   const mime = file.mime || '';
   if (file.status !== 'ready') return 'pending';
-  if (file.kind === KIND.VIDEO) return isWebPlayableVideo(name, media) ? 'video' : 'video-transcode';
+  if (file.kind === KIND.VIDEO) {
+    const compatibility = videoCompatibility(name, media);
+    if (compatibility.mode === 'native') return 'video';
+    if (compatibility.mode === 'conditional') return 'video-conditional';
+    if (compatibility.mode === 'attempt') return 'video-native-attempt';
+    return 'video-transcode';
+  }
   if (file.kind === KIND.AUDIO) return isPlayableAudio(name, media) ? 'audio' : 'download';
   if (file.kind === KIND.IMAGE) {
     if (isHeicImage(name, mime)) return file.preview?.path ? 'image-preview' : 'heic';
@@ -61,12 +67,15 @@ export function publicFile(file) {
   const media = file.media || {};
   const base = basePublicFile(file);
   const kind = previewKind(file);
+  const compatibility = file.kind === KIND.VIDEO ? videoCompatibility(file.name || '', media) : null;
   return {
     ...base,
     previewKind: kind,
-    playable: kind === 'video' || kind === 'audio' || kind === 'image' || kind === 'image-preview' || kind === 'pdf' || kind === 'text',
+    playable: kind === 'video' || kind === 'video-conditional' || kind === 'video-native-attempt' || kind === 'audio' || kind === 'image' || kind === 'image-preview' || kind === 'pdf' || kind === 'text',
     needsTranscode: kind === 'video-transcode',
     hevc: isHevc(file.name || '', media),
+    videoCompatibility: compatibility,
+    conversionStrategy: compatibility?.strategy || null,
     durationText: media.duration ? formatDuration(media.duration) : null,
     hasPreviewRendition: !!file.preview?.path,
     hasDerivative: Array.isArray(file.derivatives) && file.derivatives.length > 0,

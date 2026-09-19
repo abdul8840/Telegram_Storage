@@ -104,7 +104,7 @@ export function DrivePage({ view = 'folder' }) {
     return last || 'Folder';
   }, [view, effectiveFolderId, folderPath, meta.title]);
 
-  const hevcCount = useMemo(() => items.filter((f) => f.needsTranscode).length, [items]);
+  const conversionCount = useMemo(() => items.filter((f) => f.needsTranscode).length, [items]);
   const canTranscode = !!capabilities?.media?.transcode;
   const totalSize = stats?.totalSize || 0;
 
@@ -200,16 +200,16 @@ export function DrivePage({ view = 'folder' }) {
         </div>
       </div>
 
-      {hevcCount && view !== 'trash' ? (
+      {conversionCount && view !== 'trash' ? (
         <div className="callout callout-warn" style={{ marginBottom: 14 }}>
           <Clapperboard />
           <div style={{ flex: '1 1 260px' }}>
             <div className="callout-title">
-              {hevcCount} HEVC video{hevcCount > 1 ? 's' : ''} need converting to play in browsers
+              {conversionCount} video{conversionCount > 1 ? 's' : ''} need browser-compatible copies
             </div>
             <p className="small" style={{ marginTop: 4 }}>
-              iPhone records in H.265/HEVC. Convert once and the H.264 copy plays instantly anywhere — the original
-              stays in your cloud.
+              ZoZoCloud checks the container, video codec and audio codec separately. Compatible H.264 streams are
+              repackaged quickly; other codecs are converted while the original stays untouched.
             </p>
           </div>
           {canTranscode ? (

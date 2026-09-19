@@ -116,7 +116,7 @@ export const FileCard = memo(function FileCard({ file, selected, selecting, onOp
               </span>
             ) : null}
             {file.hevc ? (
-              <span className="thumb-badge" data-accent="hevc" title="HEVC / H.265 — convert for smooth browser playback">
+              <span className="thumb-badge" data-accent="hevc" title="HEVC / H.265 video codec">
                 HEVC
               </span>
             ) : null}
@@ -126,8 +126,8 @@ export const FileCard = memo(function FileCard({ file, selected, selecting, onOp
               </span>
             ) : null}
             {file.needsTranscode ? (
-              <span className="thumb-badge" title="Needs conversion to play in this browser">
-                <TriangleAlert style={{ width: 11, height: 11 }} /> convert
+              <span className="thumb-badge" title={file.videoCompatibility?.reason || 'Needs a browser-compatible copy'}>
+                <TriangleAlert style={{ width: 11, height: 11 }} /> {file.conversionStrategy === 'remux' ? 'MP4' : 'convert'}
               </span>
             ) : null}
           </div>
