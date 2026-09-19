@@ -9,6 +9,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 import express from 'express';
 import helmet from 'helmet';
@@ -173,7 +174,24 @@ async function main() {
   server.keepAliveTimeout = 65_000;
   server.timeout = 0;
 
-  await new Promise((resolve) => server.listen(config.port, config.host, resolve));
+  server.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+      log.error(`port ${config.port} is already in use. Stop the other server or change PORT in .env.`);
+      process.exit(1);
+    }
+    throw err;
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(config.port, config.host, resolve);
+  }).catch((err) => {
+    if (err && err.code === 'EADDRINUSE') {
+      log.error(`port ${config.port} is already in use. Stop the other server or change PORT in .env.`);
+      process.exit(1);
+    }
+    throw err;
+  });
   log.info(`listening on http://${config.host}:${config.port}`);
 
   await recoverJobs();
@@ -203,7 +221,13 @@ async function main() {
   return server;
 }
 
-const isDirectRun = process.argv[1] && import.meta.url === `file://${path.resolve(process.argv[1])}`;
+const isDirectRun = (() => {
+  if (!process.argv[1]) return false;
+  const entryPath = path.resolve(process.argv[1]);
+  const currentFile = path.resolve(fileURLToPath(import.meta.url));
+  return path.normalize(entryPath).toLowerCase() === path.normalize(currentFile).toLowerCase();
+})();
+
 if (isDirectRun) {
   main().catch((err) => {
     log.error('failed to start:', err);
