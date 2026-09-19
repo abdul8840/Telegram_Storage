@@ -1,7 +1,7 @@
 /**
  * Telegram storage provider.
  *
- * Turns a normal Telegram account into unlimited cloud storage over MTProto:
+ * Uses a connected Telegram account as the file-storage backend over MTProto:
  *   • uploads  — streamed from disk in parts (2 GB free / 4 GB Premium per file)
  *   • downloads — arbitrary byte ranges, which is what makes <video> seeking work
  *   • deletes  — removes the backing message
@@ -91,7 +91,7 @@ function sendPolicy({ fileName, kind, media }) {
 
 function captionFor({ fileName, folderPath, size }) {
   const where = folderPath && folderPath !== '/' ? folderPath : '';
-  const head = '☁️ Telegram Cloud';
+  const head = '☁️ ZoZoCloud';
   return [head, where, `${fileName} · ${formatBytes(size)}`].filter(Boolean).join(' · ').slice(0, 1000);
 }
 

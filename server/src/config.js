@@ -44,6 +44,7 @@ export const config = {
     .filter(Boolean),
 
   jwt: {
+    // Keep the legacy development fallback so existing local sessions remain readable.
     secret: process.env.JWT_SECRET || 'telegram-cloud-dev-secret-change-me',
     expiresIn: process.env.JWT_EXPIRES_IN || '30d',
     cookieName: 'tgc_token',
@@ -76,8 +77,8 @@ export const config = {
     maxConcurrentDownloads: int(process.env.TG_MAX_CONCURRENT_DOWNLOADS, 4),
     // seconds of idleness before a Telegram client is disconnected
     clientIdleTimeoutMs: int(process.env.TG_CLIENT_IDLE_MS, 10 * 60 * 1000),
-    sessionName: process.env.TG_SESSION_NAME || 'TelegramCloudDrive',
-    deviceModel: process.env.TG_DEVICE_MODEL || 'TelegramCloud',
+    sessionName: process.env.TG_SESSION_NAME || 'ZoZoCloud',
+    deviceModel: process.env.TG_DEVICE_MODEL || 'ZoZoCloud',
   },
 
   media: {

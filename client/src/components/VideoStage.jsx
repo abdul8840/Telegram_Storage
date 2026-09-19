@@ -186,7 +186,7 @@ export function VideoStage({ file, onConvert, onDownload }) {
               {media.vcodec ? ` · ${media.vcodec}` : ''}
               {media.width ? ` · ${media.width}×${media.height}` : ''}
               {media.duration ? ` · ${Math.round(media.duration)}s` : ''}. Convert it once and the H.264 MP4 copy plays
-              instantly on any device, keeps the original safe, and stays in your Telegram cloud.
+              instantly on any device, keeps the original safe, and stays in your ZoZoCloud storage.
             </p>
             <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
               {canTranscode ? (

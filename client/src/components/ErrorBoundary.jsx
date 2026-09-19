@@ -17,7 +17,7 @@ export class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     // Surface it in the console (and any future error reporter) with context.
-    console.error('[Telegram Cloud] render error:', error, info?.componentStack);
+    console.error('[ZoZoCloud] render error:', error, info?.componentStack);
   }
 
   render() {

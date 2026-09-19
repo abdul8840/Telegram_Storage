@@ -598,7 +598,7 @@ export function ShareDialog({ file, onClose }) {
         </div>
       ) : (
         <p className="hint">
-          No links yet. Create one above — the file streams straight from your Telegram cloud to whoever you share it
+          No links yet. Create one above — the file streams through ZoZoCloud to whoever you share it
           with, no account needed.
         </p>
       )}
@@ -722,10 +722,10 @@ export function TelegramDialog({ onClose }) {
     }
     if (result?.step === 'done' || result?.account?.connected) {
       setStep('done');
-      setInfo(result.warning || 'Telegram is connected — uploads now land in your Telegram cloud.');
+      setInfo(result.warning || 'Telegram is connected — uploads now land in ZoZoCloud storage.');
       applyStatus(await Telegram.status());
       refreshDrive();
-      toast({ kind: 'success', title: 'Telegram connected', message: 'Your files now live in the Telegram cloud', timeout: 5200 });
+      toast({ kind: 'success', title: 'Storage connected', message: 'Your files now live in ZoZoCloud storage', timeout: 5200 });
       return;
     }
     if (result?.step === 'code') {
@@ -829,8 +829,8 @@ export function TelegramDialog({ onClose }) {
     <Modal
       open
       onClose={busy ? undefined : onClose}
-      title="Connect Telegram"
-      subtitle={connected ? 'Your files are stored in the Telegram cloud' : 'Use your Telegram account as unlimited cloud storage'}
+      title="Connect storage"
+      subtitle={connected ? 'ZoZoCloud is connected to your Telegram storage backend' : 'Authorize your own Telegram account as the storage backend'}
       icon={Send}
       width="wide"
       footer={
@@ -882,6 +882,21 @@ export function TelegramDialog({ onClose }) {
                   </span>
                 </Fragment>
               ))}
+            </div>
+          ) : null}
+
+          {!connected && activeStep !== 'done' ? (
+            <div className="callout callout-brand" style={{ marginBottom: 14 }}>
+              <ShieldCheck />
+              <div>
+                <div className="callout-title">Independent connection notice</div>
+                <p className="small" style={{ marginTop: 4 }}>
+                  ZoZoCloud is not affiliated with or endorsed by Telegram. Values entered here are sent over HTTPS
+                  to this ZoZoCloud server to create an MTProto session. Login codes and 2FA passwords are used only
+                  during sign-in and are not stored.{' '}
+                  <a href="/privacy" target="_blank" rel="noreferrer">Read the privacy details</a>.
+                </p>
+              </div>
             </div>
           ) : null}
 
@@ -952,8 +967,8 @@ export function TelegramDialog({ onClose }) {
                       <a href="https://my.telegram.org/apps" target="_blank" rel="noreferrer">
                         my.telegram.org/apps
                       </a>{' '}
-                      → “API development tools”. They identify this app to Telegram; your password is never seen by this
-                      server.
+                      → “API development tools”. They identify this independently operated app to Telegram. The API
+                      hash and resulting session are protected at rest by this server.
                     </p>
                   </div>
 
@@ -1054,7 +1069,7 @@ export function TelegramDialog({ onClose }) {
                     value={password2fa}
                     onChange={(e) => setPassword2fa(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && submitPassword()}
-                    placeholder="Your Telegram cloud password"
+                    placeholder="Your Telegram 2FA password"
                   />
                   <p className="hint">
                     {status?.login?.passwordHint ? `Hint: ${status.login.passwordHint}` : 'Your account has 2FA enabled — enter it to finish.'}
@@ -1068,7 +1083,7 @@ export function TelegramDialog({ onClose }) {
                     <Check /> Connected
                   </div>
                   <p className="small" style={{ marginTop: 6 }}>
-                    {info || 'Upload a file to see it stored in your Telegram cloud.'}
+                    {info || 'Upload a file to see it stored in ZoZoCloud.'}
                   </p>
                 </div>
               ) : null}

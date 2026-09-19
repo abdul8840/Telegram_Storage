@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * End-to-end smoke test for the Telegram Cloud Drive API.
+ * End-to-end smoke test for the ZoZoCloud API.
  *
  * Exercises the full lifecycle against a running server: signup → folders →
  * resumable chunked upload of an iPhone-style HEVC .mov → processing →
@@ -95,7 +95,7 @@ async function makeFixtures(dir) {
     ]);
     run(['-f', 'lavfi', '-i', 'testsrc2=size=800x600:rate=1:duration=1', '-frames:v', '1', out.png]);
   }
-  await fsp.writeFile(out.text, 'Telegram Cloud Drive smoke test\n'.repeat(200));
+  await fsp.writeFile(out.text, 'ZoZoCloud smoke test\n'.repeat(200));
   return out;
 }
 
@@ -215,7 +215,7 @@ function listenToEvents(onEvent) {
 // ── the test ───────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`${c.b}Telegram Cloud Drive — end-to-end smoke test${c.x}`);
+  console.log(`${c.b}ZoZoCloud — end-to-end smoke test${c.x}`);
   console.log(`${c.d}target: ${BASE}${c.x}`);
 
   step('health');

@@ -36,7 +36,7 @@ import { Files } from '../lib/api.js';
 import { formatBytes } from '../lib/format.js';
 
 const VIEW_META = {
-  folder: { title: 'My Drive', icon: HardDrive, empty: 'Drop files anywhere to store them in your Telegram cloud' },
+  folder: { title: 'My Drive', icon: HardDrive, empty: 'Drop files anywhere to store them in ZoZoCloud' },
   photos: { title: 'Photos', icon: ImageIcon, empty: 'No photos yet — upload some and thumbnails appear instantly' },
   videos: { title: 'Videos', icon: Video, empty: 'No videos yet — iPhone HEVC recordings are welcome' },
   audio: { title: 'Audio', icon: AudioLines, empty: 'No audio files yet' },

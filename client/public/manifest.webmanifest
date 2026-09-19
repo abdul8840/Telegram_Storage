@@ -1,7 +1,7 @@
 {
-  "name": "Telegram Cloud Drive",
-  "short_name": "TG Cloud",
-  "description": "Unlimited personal cloud storage powered by your own Telegram account — photos, documents and HEVC videos that stream anywhere.",
+  "name": "ZoZoCloud",
+  "short_name": "ZoZoCloud",
+  "description": "An independently operated personal file library backed by your own Telegram account. Not affiliated with Telegram.",
   "start_url": "/drive",
   "scope": "/",
   "display": "standalone",

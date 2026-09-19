@@ -14,7 +14,6 @@ import {
   Link2,
   Music,
   Plus,
-  Send,
   Settings,
   Star,
   Trash2,
@@ -121,11 +120,11 @@ export function Sidebar({ onFolderContextMenu, onClose }) {
     <aside className="sidebar" data-open={sidebarOpen}>
       <div className="sidebar-brand">
         <span className="brand-mark">
-          <Send />
+          <Cloud />
         </span>
         <div style={{ minWidth: 0 }}>
-          <div className="brand-name">Telegram Cloud</div>
-          <div className="brand-sub">Unlimited personal drive</div>
+          <div className="brand-name">ZoZoCloud</div>
+          <div className="brand-sub">Personal file library</div>
         </div>
       </div>
 
@@ -188,7 +187,7 @@ export function Sidebar({ onFolderContextMenu, onClose }) {
           <div className="storage-meter-top">
             <span className="row" style={{ gap: 6, fontWeight: 600 }}>
               {onTelegram ? <Cloud size={14} style={{ color: 'var(--brand)' }} /> : <TriangleAlert size={14} />}
-              {onTelegram ? 'Telegram cloud' : 'Telegram disconnected'}
+              {onTelegram ? 'ZoZoCloud storage' : 'Storage disconnected'}
             </span>
             <span className="tiny muted">{formatBytes(stats?.totalSize || 0)}</span>
           </div>

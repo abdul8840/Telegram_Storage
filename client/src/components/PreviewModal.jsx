@@ -260,7 +260,7 @@ function DetailRows({ doc }) {
     ['Added', formatDateTime(doc.createdAt)],
     doc.updatedAt ? ['Updated', formatDate(doc.updatedAt)] : null,
     doc.folderPath ? ['Folder', doc.folderPath] : null,
-    ['Stored in', doc.inTelegram ? 'Telegram cloud' : doc.provider === 'local' ? 'Local disk' : doc.provider || '—'],
+    ['Stored in', doc.inTelegram ? 'ZoZoCloud (Telegram backend)' : doc.provider === 'local' ? 'Local disk' : doc.provider || '—'],
     doc.telegramMessageId ? ['Telegram message', String(doc.telegramMessageId)] : null,
     doc.downloadCount ? ['Downloads', String(doc.downloadCount)] : null,
     doc.derivedFrom ? ['Converted from', doc.derivedFrom] : null,

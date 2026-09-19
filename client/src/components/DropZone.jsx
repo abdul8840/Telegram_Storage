@@ -65,7 +65,7 @@ export function DropZone({ onFiles, enabled = true }) {
       <div className="drop-card">
         <CloudUpload />
         <div>
-          <div className="drop-title">Drop to upload to your Telegram cloud</div>
+          <div className="drop-title">Drop to upload to ZoZoCloud</div>
           <p className="hint" style={{ marginTop: 8 }}>
             Files, photos and videos — including HEVC iPhone recordings. Dropped folders keep their structure.
           </p>

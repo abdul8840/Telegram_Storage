@@ -1,15 +1,15 @@
 /** Sign in / create account. */
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Clapperboard,
+  Cloud,
   FolderSync,
   Gauge,
-  HardDriveDownload,
   Link2,
   Loader2,
   Lock,
-  Send,
+  LogIn,
   ShieldCheck,
   Smartphone,
 } from 'lucide-react';
@@ -20,9 +20,9 @@ import { Meta } from '../lib/api.js';
 
 const FEATURES = [
   {
-    icon: Send,
-    title: 'Telegram as your cloud drive',
-    text: 'Files up to 2 GB (4 GB with Premium) are stored in your own Telegram account — private, replicated, free.',
+    icon: Cloud,
+    title: 'Your own connected storage',
+    text: 'After you explicitly connect Telegram, files are stored in your account through its MTProto API.',
   },
   {
     icon: Clapperboard,
@@ -79,7 +79,7 @@ export function LoginPage() {
     try {
       if (mode === 'signup') {
         await signup(name.trim() || email.split('@')[0], email.trim(), password);
-        toast({ kind: 'success', title: 'Welcome to your cloud', message: 'Drop a file anywhere to upload it', timeout: 5200 });
+        toast({ kind: 'success', title: 'Welcome to ZoZoCloud', message: 'Connect storage in Settings before uploading', timeout: 5200 });
       } else {
         await login(email.trim(), password);
       }
@@ -103,21 +103,21 @@ export function LoginPage() {
       <section className="auth-hero">
         <div className="row" style={{ gap: 11 }}>
           <span className="brand-mark">
-            <Send />
+            <Cloud />
           </span>
           <div>
-            <div className="brand-name">Telegram Cloud Drive</div>
-            <div className="brand-sub">Store anything. Play it anywhere.</div>
+            <div className="brand-name">ZoZoCloud</div>
+            <div className="brand-sub">Independent personal file library</div>
           </div>
         </div>
 
         <div>
           <h1 className="auth-hero-title">
-            Turn your Telegram account into an <span>unlimited cloud drive</span>
+            Your files, organized in one <span>private cloud</span>
           </h1>
           <p className="auth-hero-sub">
-            Upload documents, photos and videos — including HEVC iPhone recordings — and stream them back from any
-            device, any time, with real seeking and one-click H.264 conversion.
+            ZoZoCloud organizes documents, photos and videos and, after your explicit authorization, uses your own
+            Telegram account as the storage backend.
           </p>
         </div>
 
@@ -140,7 +140,7 @@ export function LoginPage() {
             <ShieldCheck size={14} /> Session strings encrypted at rest
           </span>
           <span className="row" style={{ gap: 6 }}>
-            <HardDriveDownload size={14} /> Local fallback storage
+            <Cloud size={14} /> Telegram-backed after authorization
           </span>
           <span className="row" style={{ gap: 6 }}>
             <Smartphone size={14} /> Works on mobile
@@ -231,7 +231,7 @@ export function LoginPage() {
             ) : null}
 
             <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={busy || signupDisabled && mode === 'signup'}>
-              {busy ? <Loader2 className="spin" /> : mode === 'login' ? <Send /> : <FolderSync />}
+              {busy ? <Loader2 className="spin" /> : mode === 'login' ? <LogIn /> : <FolderSync />}
               {mode === 'login' ? 'Sign in' : 'Create account'}
             </button>
           </form>
@@ -260,10 +260,13 @@ export function LoginPage() {
             )}
           </div>
 
-          <p className="tiny faint" style={{ marginTop: 16, lineHeight: 1.6 }}>
-            After signing in, connect your Telegram account in Settings. Uploads stay disabled until then, and every
-            uploaded file is stored in your Telegram cloud.
-          </p>
+          <div className="callout callout-brand" style={{ marginTop: 16 }}>
+            <ShieldCheck />
+            <div className="tiny" style={{ lineHeight: 1.6 }}>
+              ZoZoCloud is independently operated and is not affiliated with or endorsed by Telegram. Your ZoZoCloud
+              login is separate from your Telegram account. <Link to="/privacy">Privacy and connection details</Link>
+            </div>
+          </div>
         </div>
       </section>
     </div>

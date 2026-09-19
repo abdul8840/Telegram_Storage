@@ -92,7 +92,7 @@ export function SharesPage() {
         <EmptyState icon={Link2} title={shares.length ? 'No links match that filter' : 'No share links yet'}>
           {shares.length
             ? 'Try a different file name or token.'
-            : 'Right-click any file (or use its ⋯ menu) and choose “Share…” to create a private link. Links stream straight from your Telegram cloud — no account needed for the recipient.'}
+            : 'Right-click any file (or use its ⋯ menu) and choose “Share…” to create a private link. Links stream through ZoZoCloud from your connected storage — no account needed for the recipient.'}
         </EmptyState>
       ) : (
         <section className="panel">

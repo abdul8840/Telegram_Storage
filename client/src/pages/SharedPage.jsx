@@ -1,7 +1,7 @@
 /** Public share page (`/s/:token`) — no account needed. */
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Clapperboard, Download, Eye, Lock, Send, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { Clapperboard, Cloud, Download, Eye, Lock, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { PublicApi, urls } from '../lib/api.js';
 import { MediaStage } from '../components/PreviewModal.jsx';
 import { FileIcon } from '../components/FileIcon.jsx';
@@ -73,10 +73,10 @@ export function SharedPage() {
       <div className="public-card">
         <div className="public-head">
           <span className="brand-mark">
-            <Send />
+            <Cloud />
           </span>
           <div style={{ minWidth: 0 }}>
-            <div className="brand-name">Telegram Cloud Drive</div>
+            <div className="brand-name">ZoZoCloud</div>
             <div className="brand-sub">Shared with you</div>
           </div>
           <span className="grow" />
@@ -183,7 +183,7 @@ export function SharedPage() {
                 <Eye size={14} /> {share?.views || 0} views · {share?.downloads || 0} downloads
               </span>
               <span className="row" style={{ gap: 6 }}>
-                <ShieldCheck size={14} /> Streamed straight from the owner's Telegram cloud
+                <ShieldCheck size={14} /> Streamed through ZoZoCloud from the owner's connected storage
               </span>
               {share?.expiresAt ? (
                 <span className="row" style={{ gap: 6 }}>Link expires {formatDate(share.expiresAt)}</span>

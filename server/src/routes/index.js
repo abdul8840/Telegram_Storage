@@ -15,7 +15,7 @@ const router = express.Router();
 
 router.get('/', (_req, res) => {
   res.json({
-    name: 'Telegram Cloud Drive API',
+    name: 'ZoZoCloud API',
     version: 1,
     endpoints: [
       'POST   /api/auth/signup | /api/auth/login',

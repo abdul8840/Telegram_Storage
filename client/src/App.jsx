@@ -12,6 +12,7 @@ import DrivePage from './pages/DrivePage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import SharesPage from './pages/SharesPage.jsx';
 import SharedPage from './pages/SharedPage.jsx';
+import PrivacyPage from './pages/PrivacyPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
 function BootScreen({ label = 'Loading your cloud…' }) {
@@ -93,6 +94,7 @@ export default function App() {
 
         {/* Public share links live outside the shell. */}
         <Route path="/s/:token" element={<SharedPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
 
         <Route
           element={

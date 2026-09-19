@@ -1,5 +1,5 @@
 /**
- * Telegram Cloud Drive — server entry point.
+ * ZoZoCloud — server entry point.
  *
  *   Express  +  MongoDB (or embedded)  +  Telegram MTProto storage
  *
@@ -118,11 +118,11 @@ export function createApp() {
         .status(200)
         .type('html')
         .send(
-          `<!doctype html><html><head><meta charset="utf-8"><title>Telegram Cloud Drive</title>
+          `<!doctype html><html><head><meta charset="utf-8"><title>ZoZoCloud</title>
            <style>body{font-family:system-ui,sans-serif;background:#0b1020;color:#e8ecf8;display:grid;place-items:center;min-height:100vh;margin:0}
            .card{max-width:560px;padding:32px;border-radius:16px;background:#141a2e;border:1px solid #263052}
            code{background:#0b1020;padding:2px 6px;border-radius:6px;color:#8be9fd}</style></head>
-           <body><div class="card"><h1>Telegram Cloud Drive API is running</h1>
+           <body><div class="card"><h1>ZoZoCloud API is running</h1>
            <p>The React client has not been built yet. Run:</p>
            <p><code>npm run build --workspace client</code> or <code>npm run dev</code> from the repository root.</p>
            <p>API health: <a style="color:#8be9fd" href="/healthz">/healthz</a></p></div></body></html>`,
@@ -160,7 +160,7 @@ async function startJanitor() {
 }
 
 async function main() {
-  log.info(`starting Telegram Cloud Drive (env=${config.env}, node=${process.version})`);
+  log.info(`starting ZoZoCloud (env=${config.env}, node=${process.version})`);
   await initDb();
   const caps = await getCapabilities();
   log.info(`ffmpeg=${caps.ffmpeg.available ? 'yes' : 'no'} · thumbnails=${caps.thumbnails ? 'yes' : 'no'} · transcode=${caps.transcode ? 'yes' : 'no'} · heic=${caps.heic ? 'yes' : 'no'}`);

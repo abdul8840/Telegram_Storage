@@ -347,12 +347,12 @@ const root = T.createRoot(doc().getElementById('root'));
 root.render(T.React.createElement(T.App));
 await tick(400);
 
-console.log('\n── Telegram Cloud Drive · jsdom integration test ─────────────────────\n');
+console.log('\n── ZoZoCloud · jsdom integration test ────────────────────────────────\n');
 
 await check('app boots and shows the login form', async () => {
   await waitFor(() => q('#auth-email'), { label: '#auth-email' });
   if (!/Sign in/i.test(doc().body.textContent)) throw new Error('login card did not render');
-  if (!/Telegram as your cloud drive|unlimited cloud drive/i.test(doc().body.textContent)) {
+  if (!/own connected storage|private cloud/i.test(doc().body.textContent)) {
     throw new Error('marketing copy missing');
   }
 });
@@ -403,7 +403,7 @@ await check('client upload queue uploads a text file end to end', async () => {
 
 await check('dock shows progress metadata and can be dismissed', async () => {
   const dockText = q('.dock').textContent;
-  if (!/Saved to Telegram cloud|Uploads complete/i.test(dockText)) throw new Error(`unexpected dock text: ${dockText.slice(0, 120)}`);
+  if (!/Saved to ZoZoCloud|Uploads complete/i.test(dockText)) throw new Error(`unexpected dock text: ${dockText.slice(0, 120)}`);
   click(byText('.dock-head button', /Dismiss/i) || qa('.dock-head button').pop(), 'dock dismiss');
   await waitFor(() => !q('.dock'), { timeout: 8000, label: 'dock to close' });
 });

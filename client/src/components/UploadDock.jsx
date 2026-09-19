@@ -57,7 +57,7 @@ function statusMeta(task) {
     case 'processing':
       return { text: 'Processing in the cloud…', state: 'active', icon: <Spinner size={12} /> };
     case 'ready':
-      return { text: 'Saved to Telegram cloud', state: 'done', icon: <CheckCircle2 size={12} /> };
+      return { text: 'Saved to ZoZoCloud', state: 'done', icon: <CheckCircle2 size={12} /> };
     case 'paused':
       return { text: 'Paused', state: 'paused', icon: <Pause size={12} /> };
     case 'cancelled':

@@ -6,8 +6,9 @@
  * after a period of idleness so a long-running server does not hold sockets
  * open forever.
  *
- * Session strings are encrypted at rest (AES-256-GCM, key derived from
- * SESSION_ENCRYPTION_KEY / JWT_SECRET) and never leave the server in plain text.
+ * Session strings and API hashes are encrypted at rest (AES-256-GCM, key
+ * derived from SESSION_ENCRYPTION_KEY / JWT_SECRET). Login codes and 2FA
+ * passwords are used only by the in-memory login flow and are never persisted.
  */
 import teleproto from 'teleproto';
 import bigInt from 'big-integer';
@@ -175,11 +176,26 @@ export async function getClient(userId) {
     throw ApiError.badRequest('Telegram API credentials are missing for this account.', null, 'TG_NO_CREDENTIALS');
   }
 
+  // Transparently upgrade account records created before API-hash encryption
+  // was introduced. The update is atomic and does not interrupt the session.
+  let apiHash = account.apiHash;
+  if (account.apiHashEncrypted) {
+    apiHash = decrypt(account.apiHash);
+  } else {
+    const encryptedHash = encrypt(account.apiHash);
+    await db.tgAccounts.updateOne(
+      { _id: account._id },
+      { $set: { apiHash: encryptedHash, apiHashEncrypted: true, updatedAt: new Date().toISOString() } },
+    );
+    account.apiHash = encryptedHash;
+    account.apiHashEncrypted = true;
+  }
+
   const entry = { userId: key, account, connected: false, connecting: null, client: null, lastUsed: Date.now() };
   clients.set(key, entry);
 
   try {
-    const { client, session } = buildClient(decrypt(account.sessionString), account.apiId, account.apiHash);
+    const { client, session } = buildClient(decrypt(account.sessionString), account.apiId, apiHash);
     entry.client = client;
     entry.session = session;
     await client.connect();
@@ -442,7 +458,8 @@ async function finishLogin(userId, record, { alreadyAuthorized = false } = {}) {
 
   const account = await upsertAccount(String(userId), {
     apiId: record.apiId,
-    apiHash: record.apiHash,
+    apiHash: encrypt(record.apiHash),
+    apiHashEncrypted: true,
     sessionString: encrypt(sessionString),
     phone: record.phone,
     status: 'active',
@@ -479,7 +496,16 @@ export async function disconnectAccount(userId) {
   if (account) {
     await db.tgAccounts.updateOne(
       { _id: account._id },
-      { $set: { status: 'disconnected', sessionString: '', lastError: null, updatedAt: new Date().toISOString() } },
+      {
+        $set: {
+          status: 'disconnected',
+          sessionString: '',
+          apiHash: '',
+          apiHashEncrypted: false,
+          lastError: null,
+          updatedAt: new Date().toISOString(),
+        },
+      },
     );
   }
   return { ok: true };

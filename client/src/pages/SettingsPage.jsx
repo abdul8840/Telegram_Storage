@@ -150,7 +150,7 @@ export function SettingsPage() {
                       <p className="small" style={{ marginTop: 4 }}>
                         {storage?.active === 'telegram'
                           ? `Unlimited total space, up to ${formatBytes(storage?.limits?.perTelegramFile || 2 * 1024 ** 3)} per file. Your files are private to your Telegram account.`
-                          : 'Uploads are paused because local-disk fallback is disabled. Connect Telegram and every new file will be stored in your Telegram cloud.'}
+                          : 'Uploads are paused because local-disk fallback is disabled. Connect Telegram and every new file will be stored through ZoZoCloud in your account.'}
                       </p>
                     </div>
                   </div>

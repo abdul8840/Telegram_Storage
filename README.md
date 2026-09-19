@@ -1,8 +1,10 @@
-# Telegram Cloud Drive
+# ZoZoCloud
 
-**Turn your Telegram account into a personal cloud drive.** Upload documents, photos and videos — including iPhone
-HEVC/H.265 recordings — store them in your own Telegram cloud (2 GB per file, 4 GB with Premium), and stream them back
+**An independent personal file library with a Telegram storage backend.** Upload documents, photos and videos — including iPhone
+HEVC/H.265 recordings — store them through your connected Telegram account (2 GB per file, 4 GB with Premium), and stream them back
 from any device with real seeking, thumbnails and one-click H.264 conversion.
+
+ZoZoCloud is independently operated and is not affiliated with, sponsored by or endorsed by Telegram.
 
 Full-stack **MERN** app: MongoDB (with a zero-config embedded fallback), Express, React 18 + Vite, Node.js, and
 `teleproto` (MTProto) talking to Telegram as a storage backend.
@@ -77,9 +79,9 @@ and switching to MongoDB/Atlas later is a single environment variable.
 
 ---
 
-## Connecting Telegram (real cloud storage)
+## Connecting a Telegram storage backend
 
-Uploads are accepted only after you connect **your Telegram cloud**:
+Uploads are accepted only after you explicitly connect **your Telegram account**:
 
 1. Go to <https://my.telegram.org> → *API development tools* → create an application → copy **api_id** and **api_hash**.
 2. In the app: **Settings → Connect Telegram** (or the sidebar prompt), enter `api_id`, `api_hash` and your phone
@@ -92,8 +94,9 @@ You can also pre-fill the wizard for every user via `TG_API_ID` / `TG_API_HASH` 
 Resumable chunks are staged briefly under `UPLOAD_TMP_PATH` while an upload is in progress, then deleted after
 Telegram confirms the file. They are never retained as the permanent storage copy.
 
-> Your password is never seen by this server: the login is a standard MTProto code/2FA flow, and only the resulting
-> session string is stored — encrypted with `SESSION_ENCRYPTION_KEY` (falls back to `JWT_SECRET`).
+> The login code and 2FA password are processed transiently by this server and are not stored. The resulting session
+> string and API hash are encrypted with `SESSION_ENCRYPTION_KEY` (falls back to `JWT_SECRET`). Only use a deployment
+> whose operator you trust, and revoke its session from Telegram's Devices settings if you stop using it.
 
 ---
 

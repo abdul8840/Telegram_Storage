@@ -1,8 +1,8 @@
 {
-  "name": "telegram-cloud-server",
+  "name": "zozocloud-server",
   "version": "1.0.0",
   "private": true,
-  "description": "Express + MongoDB backend that turns a Telegram account into a personal cloud drive",
+  "description": "Express + MongoDB backend for the ZoZoCloud personal file library",
   "type": "module",
   "main": "src/index.js",
   "scripts": {

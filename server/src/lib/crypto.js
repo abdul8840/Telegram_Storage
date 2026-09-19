@@ -1,6 +1,6 @@
 /**
  * Crypto helpers: password hashing, random ids/tokens, and AES-256-GCM
- * encryption for secrets at rest (Telegram session strings).
+ * encryption for secrets at rest (Telegram sessions and API hashes).
  */
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
