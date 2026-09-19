@@ -1,0 +1,229 @@
+/* ── Responsive: tablet → phone ────────────────────────────────────────── */
+
+@media (max-width: 1180px) {
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .preview-side {
+    width: 280px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .list-head,
+  .list-row {
+    grid-template-columns: 26px minmax(180px, 3fr) 100px 120px 40px;
+  }
+  .list-col-kind {
+    display: none;
+  }
+  .file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (max-width: 900px) {
+  :root {
+    --sidebar-w: 268px;
+    --topbar-h: 58px;
+  }
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: var(--sidebar-w);
+    z-index: 130;
+    transform: translateX(-102%);
+    transition: transform 0.26s var(--ease);
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar[data-open='true'] {
+    transform: none;
+  }
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 125;
+    background: rgba(4, 6, 14, 0.6);
+    backdrop-filter: blur(3px);
+    animation: fade-in 0.2s var(--ease) both;
+  }
+  .auth-page {
+    grid-template-columns: 1fr;
+  }
+  .auth-hero {
+    display: none;
+  }
+  .preview-body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .preview-side {
+    width: 100%;
+    border-left: 0;
+    border-top: 1px solid var(--line-soft);
+  }
+  .dock {
+    right: 10px;
+    left: 10px;
+    bottom: 74px;
+    width: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .content {
+    padding: 14px 13px 150px;
+  }
+  .topbar {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .search-input {
+    max-width: none;
+  }
+  .topbar .hide-sm {
+    display: none;
+  }
+  .file-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+  .file-card-name {
+    font-size: 12.5px;
+    min-height: 2.6em;
+  }
+  .list-head {
+    display: none;
+  }
+  .list-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 9px 10px;
+  }
+  .list-col-size,
+  .list-col-date,
+  .list-col-kind {
+    display: none;
+  }
+  .list-meta-mobile {
+    display: block !important;
+  }
+  .page-title {
+    font-size: 18px;
+  }
+  .mobile-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 70;
+    justify-content: space-around;
+    align-items: center;
+    gap: 4px;
+    padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+    background: rgba(11, 16, 32, 0.94);
+    border-top: 1px solid var(--line);
+    backdrop-filter: blur(14px);
+  }
+  .mobile-nav button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 5px 10px;
+    border-radius: 10px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    min-width: 54px;
+  }
+  .mobile-nav button svg {
+    width: 19px;
+    height: 19px;
+  }
+  .mobile-nav button[data-active='true'] {
+    color: var(--brand);
+    background: var(--brand-soft);
+  }
+  .preview-nav {
+    width: 38px;
+    height: 38px;
+  }
+  .preview-stage {
+    padding: 10px;
+  }
+  .preview-image {
+    max-height: calc(100vh - 150px);
+  }
+  .preview-video {
+    width: 100%;
+    max-height: calc(100vh - 150px);
+  }
+  .drop-card {
+    padding: 36px 26px;
+  }
+  .toasts {
+    right: 10px;
+    left: 10px;
+    bottom: 78px;
+    max-width: none;
+  }
+  .modal {
+    max-width: 100%;
+    border-radius: var(--radius);
+  }
+  .modal-backdrop {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .file-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .toolbar {
+    gap: 6px;
+  }
+  .btn {
+    padding: 0 12px;
+  }
+}
+
+/* Print: hide chrome, show the list */
+@media print {
+  .sidebar,
+  .topbar,
+  .dock,
+  .mobile-nav,
+  .toasts {
+    display: none !important;
+  }
+  .content {
+    overflow: visible;
+    padding: 0;
+  }
+  body {
+    overflow: visible;
+    background: #fff;
+  }
+}
+
+/* Visibility utilities (desktop-first). */
+.only-mobile {
+  display: none !important;
+}
+
+@media (max-width: 900px) {
+  .only-mobile {
+    display: inline-flex !important;
+  }
+  .hide-mobile {
+    display: none !important;
+  }
+}
