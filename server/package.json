@@ -1,0 +1,43 @@
+{
+  "name": "telegram-cloud-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Express + MongoDB backend that turns a Telegram account into a personal cloud drive",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "lint": "node --check src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@seald-io/nedb": "^4.1.1",
+    "bcryptjs": "^2.4.3",
+    "big-integer": "^1.6.52",
+    "compression": "^1.7.5",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mime-types": "^2.1.35",
+    "mongodb": "^6.12.0",
+    "morgan": "^1.10.0",
+    "nanoid": "^5.0.9",
+    "telegram": "^2.26.22",
+    "teleproto": "^1.229.0",
+    "zod": "^3.24.1"
+  },
+  "optionalDependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^1.4.1",
+    "heic-convert": "^2.1.0",
+    "libheif-js": "^1.23.2",
+    "sharp": "^0.33.5"
+  }
+}
