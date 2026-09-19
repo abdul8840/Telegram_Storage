@@ -26,8 +26,8 @@ const FEATURES = [
   },
   {
     icon: Clapperboard,
-    title: 'iPhone HEVC videos that just play',
-    text: 'H.265 recordings are probed, thumbnailed and converted to H.264 on the server so they stream in any browser.',
+    title: 'MP4, WebM and MKV playback',
+    text: 'Videos stream through one native player with seeking, codec detection and an optional compatibility copy.',
   },
   {
     icon: Gauge,

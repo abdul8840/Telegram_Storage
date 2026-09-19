@@ -1,5 +1,5 @@
 /**
- * Full-screen preview overlay: images, video (with the HEVC → H.264 path),
+ * Full-screen preview overlay: images, range-streamed video,
  * audio, PDF, text and a details panel. `MediaStage` is exported so the public
  * share page can render exactly the same viewer.
  */
@@ -404,7 +404,6 @@ export function PreviewModal() {
           </div>
         </div>
 
-        {doc?.hevc ? <span className="badge badge-violet">HEVC</span> : null}
         {doc?.needsTranscode ? (
           <span className="badge badge-warn">{doc.conversionStrategy === 'remux' ? 'Needs MP4' : 'Needs convert'}</span>
         ) : null}

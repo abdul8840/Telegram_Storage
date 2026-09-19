@@ -1,11 +1,10 @@
 /**
  * Video playback stage.
  *
- * iPhone recordings are commonly HEVC/H.265 inside a .mov container. Browser
- * support depends on the browser, operating system and installed codec. This
- * component:
- *   1. detects and uses native HEVC playback when available,
- *   2. offers a one-click server-side convert to H.264 MP4 when it cannot,
+ * A single native HTML video player for MP4/MOV, WebM and MKV. The server
+ * provides authenticated byte-range streaming from Telegram. This component:
+ *   1. tries every supported/conditionally-supported container directly,
+ *   2. offers an MP4/H.264 fallback only after a real playback error,
  *   3. streams live job progress while the convert runs,
  *   4. automatically switches to the browser-friendly copy when it is ready.
  */
@@ -25,15 +24,7 @@ import { useUi } from '../store/ui.js';
 import { Progress, Spinner } from './common.jsx';
 import { formatBytes } from '../lib/format.js';
 
-function browserAdvertisesHevc() {
-  if (typeof document === 'undefined') return false;
-  const probe = document.createElement('video');
-  return [
-    'video/mp4; codecs="hvc1"',
-    'video/mp4; codecs="hev1"',
-    'video/quicktime; codecs="hvc1"',
-  ].some((type) => Boolean(probe.canPlayType?.(type)));
-}
+const DIRECT_VIDEO_KINDS = new Set(['video', 'video-conditional', 'video-native-attempt']);
 
 export function VideoStage({ file, onConvert, onDownload }) {
   const capabilities = useDrive((s) => s.capabilities);
@@ -42,9 +33,10 @@ export function VideoStage({ file, onConvert, onDownload }) {
 
   const [alts, setAlts] = useState([]);
   const [doc, setDoc] = useState(file);
-  const [playError, setPlayError] = useState(false);
+  const [playError, setPlayError] = useState(null);
   const [forceTry, setForceTry] = useState(false);
-  const [nativeHevc, setNativeHevc] = useState(false);
+  const [streamAttempt, setStreamAttempt] = useState(0);
+  const [networkRetries, setNetworkRetries] = useState(0);
   const videoRef = useRef(null);
 
   const derivativeKey = useMemo(() => (file.derivatives || []).join(','), [file.derivatives]);
@@ -56,10 +48,11 @@ export function VideoStage({ file, onConvert, onDownload }) {
   }, [file]);
 
   useEffect(() => {
-    setNativeHevc(file.hevc ? browserAdvertisesHevc() : false);
-    setPlayError(false);
+    setPlayError(null);
     setForceTry(false);
-  }, [file.id, file.hevc]);
+    setStreamAttempt(0);
+    setNetworkRetries(0);
+  }, [file.id]);
 
   // Load derivative documents once, and pick the browser-friendly one.
   useEffect(() => {
@@ -104,7 +97,9 @@ export function VideoStage({ file, onConvert, onDownload }) {
       if (!created) return;
       setAlts((prev) => [created, ...prev.filter((a) => a.id !== created.id)]);
       setDoc(created);
-      setPlayError(false);
+      setPlayError(null);
+      setStreamAttempt((attempt) => attempt + 1);
+      setNetworkRetries(0);
       toast({
         kind: 'success',
         title: finishedJob?.output?.strategy === 'remux' ? 'Web MP4 ready' : 'H.264 copy ready',
@@ -114,15 +109,41 @@ export function VideoStage({ file, onConvert, onDownload }) {
     })();
   }, [finishedJob, toast]);
 
-  const isOriginalHevc = doc.id === file.id && !!file.hevc;
-  const isConditionalHevc = doc.previewKind === 'video-conditional' && isOriginalHevc;
-  const isNativeAttempt = doc.previewKind === 'video-native-attempt';
-  const playable = (doc.previewKind === 'video' || isNativeAttempt || (isConditionalHevc && nativeHevc)) && !playError;
+  const playable = DIRECT_VIDEO_KINDS.has(doc.previewKind) && !playError;
   const showConvertPrompt = !playable;
   const media = doc.media || {};
   const compatibility = doc.videoCompatibility || file.videoCompatibility || {};
   const canTryOriginal = ['conditional', 'attempt'].includes(compatibility.mode) || compatibility.reasonCode !== 'container';
   const isRemux = compatibility.strategy === 'remux';
+  const baseStreamUrl = urls.stream(doc.id, getToken());
+  const streamUrl = `${baseStreamUrl}${baseStreamUrl.includes('?') ? '&' : '?'}play_attempt=${streamAttempt}`;
+
+  const retryPlayback = ({ force = false } = {}) => {
+    setPlayError(null);
+    setForceTry(force);
+    setNetworkRetries(0);
+    setStreamAttempt((attempt) => attempt + 1);
+  };
+
+  const handleVideoError = (event) => {
+    const mediaError = event.currentTarget.error;
+    const code = Number(mediaError?.code || 0);
+    const message = mediaError?.message || '';
+
+    // MEDIA_ERR_ABORTED is expected when React changes the selected rendition.
+    if (code === 1) return;
+
+    // Telegram/host connections can occasionally be interrupted. Retry with a
+    // fresh request before presenting a format/decoder failure to the user.
+    if (code === 2 && networkRetries < 2) {
+      setNetworkRetries((count) => count + 1);
+      setStreamAttempt((attempt) => attempt + 1);
+      return;
+    }
+
+    setPlayError({ code, message });
+    setForceTry(false);
+  };
 
   const convert = () => {
     if (onConvert) onConvert(file);
@@ -135,21 +156,22 @@ export function VideoStage({ file, onConvert, onDownload }) {
         <div className="row" style={{ gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
           {[file, ...alts].map((option) => {
             const isOriginal = option.id === file.id;
-            const friendly = option.previewKind === 'video';
             return (
               <button
                 key={option.id}
                 className="chip"
                 data-active={doc.id === option.id}
                 onClick={() => {
-                  setPlayError(false);
+                  setPlayError(null);
                   setForceTry(false);
+                  setNetworkRetries(0);
+                  setStreamAttempt((attempt) => attempt + 1);
                   setDoc(option);
                 }}
                 title={option.name}
               >
-                {friendly || (isOriginal && file.previewKind === 'video-conditional' && nativeHevc) ? <Play size={12} /> : <Film size={12} />}
-                {isOriginal ? `Original${file.hevc ? ' (HEVC)' : ''}` : 'H.264 copy'}
+                {DIRECT_VIDEO_KINDS.has(option.previewKind) ? <Play size={12} /> : <Film size={12} />}
+                {isOriginal ? 'Original' : 'Browser copy'}
                 <span className="tiny faint">{formatBytes(option.size || 0)}</span>
               </button>
             );
@@ -159,18 +181,16 @@ export function VideoStage({ file, onConvert, onDownload }) {
 
       {playable || forceTry ? (
         <video
+          key={`${doc.id}-${streamAttempt}`}
           ref={videoRef}
           className="preview-video"
-          src={urls.stream(doc.id, getToken())}
+          src={streamUrl}
           poster={doc.hasThumb ? urls.thumbnail(doc.id, getToken()) : undefined}
           controls
           autoPlay
           playsInline
           preload="metadata"
-          onError={() => {
-            if (!forceTry) setPlayError(true);
-            else toast({ kind: 'warn', title: 'Your browser cannot decode this video', message: 'Convert it to H.264 to play it here', timeout: 6000 });
-          }}
+          onError={handleVideoError}
         />
       ) : null}
 
@@ -206,32 +226,41 @@ export function VideoStage({ file, onConvert, onDownload }) {
           <div style={{ flex: '1 1 240px', minWidth: 0 }}>
             <div className="callout-title" style={{ fontSize: 13.5 }}>
               {playError
-                ? `Your browser could not play this ${compatibility.containerLabel || 'video'}`
+                ? playError.code === 2
+                  ? 'The video stream was interrupted'
+                  : playError.code === 3
+                    ? 'Your browser could not decode this video'
+                    : `Your browser could not play this ${compatibility.containerLabel || 'video'}`
                 : compatibility.reasonCode === 'container'
                   ? `${compatibility.containerLabel || 'This container'} needs a browser-compatible copy`
-                  : file.hevc
-                    ? 'HEVC (H.265) needs browser codec support'
-                    : 'This video needs a browser-compatible copy'}
+                  : 'This video needs a browser-compatible copy'}
             </div>
             <p className="small" style={{ marginTop: 5, color: 'var(--text-soft)' }}>
               {doc.name}
               {media.vcodec ? ` · ${media.vcodec}` : ''}
               {media.width ? ` · ${media.width}×${media.height}` : ''}
               {media.duration ? ` · ${Math.round(media.duration)}s` : ''}.{' '}
-              {compatibility.reason || 'The container or codec is not supported reliably by this browser.'}
+              {playError?.code === 2
+                ? 'The connection to Telegram ended before playback completed. Retry playback; converting the file will not fix a network interruption.'
+                : compatibility.reason || 'The container or codec is not supported reliably by this browser.'}
             </p>
             <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-              {canTranscode ? (
+              {playError ? (
+                <button className="btn btn-primary btn-sm" onClick={() => retryPlayback()}>
+                  <Play /> Retry playback
+                </button>
+              ) : null}
+              {canTranscode && playError?.code !== 2 ? (
                 <button className="btn btn-primary btn-sm" onClick={convert}>
                   <Sparkles /> {isRemux ? 'Prepare MP4 & play' : 'Convert to H.264 & play'}
                 </button>
-              ) : (
+              ) : !canTranscode && playError?.code !== 2 ? (
                 <span className="badge badge-warn">
                   <AlertTriangle size={12} /> ffmpeg unavailable on this server
                 </span>
-              )}
-              {canTryOriginal ? (
-                <button className="btn btn-outline btn-sm" onClick={() => setForceTry(true)}>
+              ) : null}
+              {canTryOriginal && !playError ? (
+                <button className="btn btn-outline btn-sm" onClick={() => retryPlayback({ force: true })}>
                   <Play /> Try original
                 </button>
               ) : null}

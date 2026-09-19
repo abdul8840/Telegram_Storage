@@ -115,11 +115,6 @@ export const FileCard = memo(function FileCard({ file, selected, selecting, onOp
                 <Film style={{ width: 11, height: 11 }} /> {duration}
               </span>
             ) : null}
-            {file.hevc ? (
-              <span className="thumb-badge" data-accent="hevc" title="HEVC / H.265 video codec">
-                HEVC
-              </span>
-            ) : null}
             {file.inTelegram ? (
               <span className="thumb-badge" data-accent="tg" title="Stored in your Telegram account">
                 <Cloud style={{ width: 11, height: 11 }} /> TG

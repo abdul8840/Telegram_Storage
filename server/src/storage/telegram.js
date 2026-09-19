@@ -114,14 +114,24 @@ function buildLocation(storage) {
   });
 }
 
-/** Trims the generator to an exact byte count (MTProto returns whole chunks). */
-function toReadable(generator, { totalBytes, signal }) {
+/**
+ * Skips an alignment prefix and trims to the exact HTTP range. Telegram only
+ * accepts aligned upload.getFile offsets, while browsers may request any byte.
+ */
+function toReadable(generator, { skipBytes = 0, totalBytes, signal }) {
   let emitted = 0;
+  let skipped = 0;
   const iter = (async function* trimmed() {
     for await (const chunk of generator) {
       if (signal?.aborted) throw new AbortError();
       if (!chunk || chunk.length === 0) continue;
       let out = chunk;
+      if (skipped < skipBytes) {
+        const remainingSkip = skipBytes - skipped;
+        const take = Math.min(remainingSkip, out.length);
+        skipped += take;
+        out = out.subarray(take);
+      }
       if (totalBytes !== undefined && emitted + out.length > totalBytes) out = out.subarray(0, Math.max(0, totalBytes - emitted));
       if (out.length === 0) break;
       emitted += out.length;
@@ -332,20 +342,38 @@ export const telegramProvider = {
     const to = end === undefined || end === null ? Math.max(0, total - 1) : Math.min(end, Math.max(0, total - 1));
     if (total > 0 && from > to) throw new StorageError('Requested range is not satisfiable', { code: 'RANGE' });
     const length = to - from + 1;
+    // upload.getFile rejects arbitrary offsets and requests that cross its
+    // internal 1 MiB boundaries. Align to our 512 KiB request size, then
+    // discard the prefix before exposing bytes to the HTTP client.
+    const telegramAlignment = 512 * 1024;
+    const alignedFrom = Math.floor(from / telegramAlignment) * telegramAlignment;
+    const prefixBytes = from - alignedFrom;
+    const telegramLength = prefixBytes + length;
 
-    return semaphoreFor(downloadSemaphores, userId, config.telegram.maxConcurrentDownloads).run(async () => {
+    const gate = semaphoreFor(downloadSemaphores, userId, config.telegram.maxConcurrentDownloads);
+    await gate.acquire();
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      gate.release();
+    };
+    try {
       const { client } = await getClientAndAccount(userId);
       const open = async (ref) => {
         const location = buildLocation(ref);
         const generator = client.iterDownload(location, {
-          offset: bigInt(from),
-          limit: length,
+          offset: bigInt(alignedFrom),
+          limit: telegramLength,
           requestSize: Math.min(1024 * 1024, 512 * 1024),
           dcId: ref.dcId ? Number(ref.dcId) : undefined,
           signal,
         });
-        const stream = toReadable(generator, { totalBytes: length, signal });
+        const stream = toReadable(generator, { skipBytes: prefixBytes, totalBytes: length, signal });
         stream.size = length;
+        stream.once('end', release);
+        stream.once('close', release);
+        stream.once('error', release);
         return stream;
       };
 
@@ -360,7 +388,10 @@ export const telegramProvider = {
         }
         throw new StorageError(describeTelegramError(err), { code: 'TG_DOWNLOAD_FAILED', cause: err });
       }
-    });
+    } catch (err) {
+      release();
+      throw err;
+    }
   },
 
   /** Downloads the whole object to a temp file (for ffmpeg probing/transcoding). */

@@ -153,7 +153,6 @@ export function SharedPage() {
                         .join(' · ')}
                     </p>
                   </div>
-                  {file.hevc ? <span className="badge badge-violet">HEVC</span> : null}
                 </div>
               </div>
             </section>

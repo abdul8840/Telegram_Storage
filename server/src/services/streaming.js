@@ -76,7 +76,7 @@ function parseRange(header, size) {
 }
 
 export function etagFor(file, size) {
-  return `W/"${file._id}-${size}-${file.updatedAt || file.createdAt || ''}"`;
+  return `"${file._id}-${size}-${file.updatedAt || file.createdAt || ''}"`;
 }
 
 /**
@@ -126,7 +126,10 @@ export async function streamFile(req, res, { file, userId, download = false, ren
   res.setHeader('ETag', etag);
   res.setHeader('Content-Type', contentType);
   res.setHeader('Content-Disposition', encodeDisposition(file.name, download));
-  res.setHeader('Cache-Control', download ? 'private, no-cache' : 'private, max-age=3600');
+  // Do not let browser/proxy caches reuse an incomplete media response after a
+  // canceled range request. `no-transform` also prevents intermediaries from
+  // modifying byte offsets, which would corrupt seeking.
+  res.setHeader('Cache-Control', download ? 'private, no-cache, no-transform' : 'private, no-store, no-transform');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   if (file.media?.duration) res.setHeader('X-Media-Duration', String(Math.round(file.media.duration)));
   if (file.media?.width && file.media?.height) {
@@ -160,10 +163,14 @@ export async function streamFile(req, res, { file, userId, download = false, ren
   const length = Math.max(0, end - start + 1);
 
   const controller = new AbortController();
-  res.on('close', () => controller.abort());
+  let stream;
+  res.on('close', () => {
+    controller.abort();
+    stream?.destroy();
+  });
 
   try {
-    const stream = await provider.createReadStream({
+    stream = await provider.createReadStream({
       userId,
       storage: file.storage,
       start,
@@ -182,6 +189,7 @@ export async function streamFile(req, res, { file, userId, download = false, ren
     res.setHeader('Content-Length', String(length));
 
     stream.on('error', (err) => {
+      if (controller.signal.aborted) return;
       log.warn(`stream error for ${file.name}: ${err.message}`);
       if (!res.headersSent) res.status(502).json({ error: `Storage error: ${err.message}` });
       else res.destroy();

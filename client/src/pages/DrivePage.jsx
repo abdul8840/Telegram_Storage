@@ -38,7 +38,7 @@ import { formatBytes } from '../lib/format.js';
 const VIEW_META = {
   folder: { title: 'My Drive', icon: HardDrive, empty: 'Drop files anywhere to store them in ZoZoCloud' },
   photos: { title: 'Photos', icon: ImageIcon, empty: 'No photos yet — upload some and thumbnails appear instantly' },
-  videos: { title: 'Videos', icon: Video, empty: 'No videos yet — iPhone HEVC recordings are welcome' },
+  videos: { title: 'Videos', icon: Video, empty: 'No videos yet — upload MP4, WebM, MKV or MOV files' },
   audio: { title: 'Audio', icon: AudioLines, empty: 'No audio files yet' },
   docs: { title: 'Documents', icon: FileText, empty: 'No documents yet' },
   starred: { title: 'Starred', icon: Star, empty: 'Star a file to keep it one click away' },
