@@ -1,0 +1,31 @@
+# deps
+node_modules/
+.pnp
+.pnp.js
+
+# build output
+client/dist/
+server/dist/
+build/
+dist/
+
+# runtime data (embedded DB, local storage provider, thumbnails, temp uploads)
+data/
+.tmp/
+*.local
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+logs/
+*.log
+npm-debug.log*
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/
+*.swp
