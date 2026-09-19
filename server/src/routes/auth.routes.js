@@ -2,7 +2,6 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
-import config from '../config.js';
 import { db } from '../db/index.js';
 import { ApiError, asyncHandler } from '../lib/errors.js';
 import { hashPassword, randomId, verifyPassword } from '../lib/crypto.js';
@@ -37,7 +36,7 @@ const authLimiter = rateLimit({
 
 function defaultSettings() {
   return {
-    storageProvider: config.storage.defaultProvider === 'telegram' ? 'telegram' : 'local',
+    storageProvider: 'telegram',
     view: 'grid',
     sort: 'createdAt',
     order: 'desc',
@@ -118,7 +117,7 @@ const profileSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
   settings: z
     .object({
-      storageProvider: z.enum(['telegram', 'local']).optional(),
+      storageProvider: z.literal('telegram').optional(),
       view: z.enum(['grid', 'list']).optional(),
       sort: z.string().optional(),
       order: z.enum(['asc', 'desc']).optional(),

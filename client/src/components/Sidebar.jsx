@@ -187,8 +187,8 @@ export function Sidebar({ onFolderContextMenu, onClose }) {
         <div className="storage-meter">
           <div className="storage-meter-top">
             <span className="row" style={{ gap: 6, fontWeight: 600 }}>
-              {onTelegram ? <Cloud size={14} style={{ color: 'var(--brand)' }} /> : <HardDrive size={14} />}
-              {onTelegram ? 'Telegram cloud' : 'This device'}
+              {onTelegram ? <Cloud size={14} style={{ color: 'var(--brand)' }} /> : <TriangleAlert size={14} />}
+              {onTelegram ? 'Telegram cloud' : 'Telegram disconnected'}
             </span>
             <span className="tiny muted">{formatBytes(stats?.totalSize || 0)}</span>
           </div>
@@ -199,7 +199,7 @@ export function Sidebar({ onFolderContextMenu, onClose }) {
             </div>
           ) : (
             <div className="storage-meter-note">
-              {stats?.files || 0} file(s) stored on this device.{' '}
+              Uploads are paused.{' '}
               <button
                 style={{ color: 'var(--brand)', fontWeight: 650 }}
                 onClick={() => {
@@ -209,12 +209,12 @@ export function Sidebar({ onFolderContextMenu, onClose }) {
               >
                 Connect Telegram
               </button>{' '}
-              for unlimited cloud storage.
+              to store every new file in Telegram.
             </div>
           )}
-          {storage?.fellBack ? (
+          {!onTelegram ? (
             <div className="row tiny" style={{ marginTop: 8, color: 'var(--warn)' }}>
-              <TriangleAlert size={12} /> Telegram selected but not connected
+              <TriangleAlert size={12} /> No local-disk fallback
             </div>
           ) : null}
         </div>

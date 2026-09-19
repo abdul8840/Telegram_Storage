@@ -24,8 +24,8 @@ Full-stack **MERN** app: MongoDB (with a zero-config embedded fallback), Express
   instead of restarting.
 - ☁️ **Telegram as the backend**: files become messages in *Saved Messages* (or any private channel/chat you pick),
   so they are replicated, private to your account and effectively unlimited.
-- 💾 **Local-disk provider** as an automatic fallback (and a zero-config demo mode) — the drive always works, even
-  offline.
+- ☁️ **Telegram-only uploads** — if Telegram is disconnected, uploads pause instead of falling back to permanent
+  server storage.
 - 🗂 Folders, nested folder trees, drag & drop of whole folders (structure is recreated in the drive), rename, move,
   star, trash with 30-day auto-purge, permanent delete.
 - 🔐 Session strings are **encrypted at rest**; JWT auth via httpOnly cookie + bearer token.
@@ -48,14 +48,14 @@ Full-stack **MERN** app: MongoDB (with a zero-config embedded fallback), Express
 
 ## Quick start
 
-Requires **Node 18+** (Node 22 recommended). No MongoDB and no Telegram account needed to try it.
+Requires **Node 18+** (Node 22 recommended). MongoDB is optional; a connected Telegram account is required to upload.
 
 ```bash
 # 1. install both packages
 npm --prefix server install
 npm --prefix client install
 
-# 2. configure (optional — every value has a working default)
+# 2. configure the server
 cp .env.example .env
 
 # 3. build the UI and start everything on http://localhost:5000
@@ -63,7 +63,7 @@ npm --prefix client run build
 npm --prefix server start
 ```
 
-Open <http://localhost:5000>, create an account, and drop a file anywhere in the window.
+Open <http://localhost:5000>, create an account, connect Telegram in Settings, and drop a file anywhere in the window.
 
 **Development mode** (hot reload, two terminals):
 
@@ -79,15 +79,18 @@ and switching to MongoDB/Atlas later is a single environment variable.
 
 ## Connecting Telegram (real cloud storage)
 
-Out of the box files are stored on the server's disk. To store them in **your Telegram cloud**:
+Uploads are accepted only after you connect **your Telegram cloud**:
 
 1. Go to <https://my.telegram.org> → *API development tools* → create an application → copy **api_id** and **api_hash**.
 2. In the app: **Settings → Connect Telegram** (or the sidebar prompt), enter `api_id`, `api_hash` and your phone
    number, then the login code Telegram sends (plus your 2FA password if enabled).
 3. Choose the destination: **Saved Messages** (default, private) or any channel/chat from the picker.
 
-That's it — new uploads go to Telegram, and streaming, thumbnails and conversion keep working exactly the same.
+That's it — every new upload goes to Telegram, and streaming, thumbnails and conversion keep working exactly the same.
 You can also pre-fill the wizard for every user via `TG_API_ID` / `TG_API_HASH` in `.env`.
+
+Resumable chunks are staged briefly under `UPLOAD_TMP_PATH` while an upload is in progress, then deleted after
+Telegram confirms the file. They are never retained as the permanent storage copy.
 
 > Your password is never seen by this server: the login is a standard MTProto code/2FA flow, and only the resulting
 > session string is stored — encrypted with `SESSION_ENCRYPTION_KEY` (falls back to `JWT_SECRET`).
@@ -142,8 +145,6 @@ Everything lives in `.env` (see [`.env.example`](.env.example) for the annotated
 | `JWT_SECRET` | dev placeholder | Token signing — **change in production** |
 | `SESSION_ENCRYPTION_KEY` | `JWT_SECRET` | AES key for stored Telegram sessions |
 | `MONGODB_URI` / `MONGODB_DB` | *(empty)* / `telegram_cloud` | Empty ⇒ embedded DB in `./data` |
-| `STORAGE_PROVIDER` | `local` | `telegram` or `local` (per-user override in Settings) |
-| `LOCAL_STORAGE_PATH` | `./data/storage` | Local provider directory |
 | `TG_API_ID` / `TG_API_HASH` / `TG_PHONE` | *(empty)* | Pre-fills the connect wizard |
 | `TG_CHAT_TARGET` | `me` | `me` = Saved Messages, or a channel/chat id |
 | `TG_UPLOAD_WORKERS` / `TG_UPLOAD_PART_KB` | `3` / `512` | Telegram upload tuning |
@@ -166,7 +167,7 @@ server/                     Express API (ESM)
   src/config.js             every environment variable, validated + defaulted
   src/routes/               auth · uploads · files · folders · shares · public · telegram · jobs · events(SSE) · meta
   src/services/             uploadManager · files · folders · media(ffmpeg/sharp) · streaming(range) · shares · jobs · importer
-  src/storage/              provider interface + telegram.js (MTProto) + local.js (disk) + telegramClient.js (session vault)
+  src/storage/              Telegram provider + session vault + read/delete compatibility for legacy local objects
   src/db/                   MongoDB driver + embedded (NeDB) driver behind one interface
   src/lib/                  errors · events(bus) · crypto · fileTypes · concurrency · logger
 

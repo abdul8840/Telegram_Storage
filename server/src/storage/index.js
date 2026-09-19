@@ -1,19 +1,15 @@
 /**
- * Provider registry.
+ * Storage provider registry.
  *
- * Files record which backend holds their bytes, so a library can mix Telegram
- * and local objects freely. When the user prefers Telegram but has not finished
- * connecting an account, we transparently fall back to local storage (and say
- * so in the UI) instead of failing the upload.
+ * New files are always stored in Telegram. The local provider remains in the
+ * registry only so objects created by older versions can still be read and
+ * deleted.
  */
 import config from '../config.js';
 import { db } from '../db/index.js';
-import { createLogger } from '../lib/logger.js';
 import { localProvider } from './local.js';
 import { telegramProvider } from './telegram.js';
 import { nullProvider } from './base.js';
-
-const log = createLogger('storage');
 
 export const providers = {
   local: localProvider,
@@ -24,29 +20,19 @@ export function getProviderByName(name) {
   return providers[name] || nullProvider;
 }
 
-async function userPreference(userId) {
-  const user = await db.users.findOne({ _id: userId }, { projection: { settings: 1 } });
-  return user?.settings?.storageProvider || config.storage.defaultProvider || 'local';
-}
-
 /**
- * Resolves the provider used for NEW uploads for this user.
- * @returns {Promise<{provider: object, preference: string, reason: string|null}>}
+ * Resolves the provider used for every new upload. This intentionally throws
+ * before upload bytes are accepted when Telegram is unavailable.
  */
 export async function getProviderForUser(userId) {
-  const preference = await userPreference(userId);
-  if (preference === 'telegram') {
-    const status = await telegramProvider.status({ userId });
-    if (status.ready) return { provider: telegramProvider, preference, reason: null };
-    log.debug(`telegram preferred but unavailable (${status.reason}) — falling back to local storage`);
-    return {
-      provider: localProvider,
-      preference,
-      reason: status.reason || 'Telegram is not connected; the file was stored locally instead.',
-      fallback: true,
-    };
+  const status = await telegramProvider.status({ userId });
+  if (!status.ready) {
+    const error = new Error(status.reason || 'Connect Telegram before uploading files.');
+    error.status = 409;
+    error.code = 'TG_NOT_CONNECTED';
+    throw error;
   }
-  return { provider: localProvider, preference, reason: null };
+  return { provider: telegramProvider, preference: 'telegram', reason: null };
 }
 
 /** Resolves the provider that holds an existing file's bytes. */
@@ -55,20 +41,15 @@ export function getProviderForFile(file) {
   return getProviderByName(name);
 }
 
-/** Everything the settings screen needs about both backends. */
+/** Everything the settings screen needs about Telegram storage. */
 export async function storageStatus(userId) {
-  const [telegram, local] = await Promise.all([
-    telegramProvider.status({ userId }).catch((err) => ({ ready: false, reason: err.message })),
-    localProvider.status({ userId }).catch((err) => ({ ready: false, reason: err.message })),
-  ]);
-  const preference = await userPreference(userId);
-  const active = preference === 'telegram' && telegram.ready ? telegramProvider : localProvider;
+  const telegram = await telegramProvider.status({ userId }).catch((err) => ({ ready: false, reason: err.message }));
   return {
-    preference,
-    active: active.name,
+    preference: 'telegram',
+    active: telegram.ready ? 'telegram' : 'unavailable',
     telegram,
-    local,
-    fellBack: preference === 'telegram' && !telegram.ready,
+    uploadReady: !!telegram.ready,
+    requiresTelegram: true,
     limits: {
       maxUploadSize: config.limits.maxUploadSize,
       perTelegramFile: telegram?.details?.account?.isPremium ? 4 * 1024 ** 3 : 2 * 1024 ** 3,
@@ -76,8 +57,9 @@ export async function storageStatus(userId) {
   };
 }
 
-export async function setProviderPreference(userId, preference) {
-  const value = preference === 'telegram' ? 'telegram' : 'local';
+/** Compatibility export for older callers; local storage cannot be selected. */
+export async function setProviderPreference(userId) {
+  const value = 'telegram';
   await db.users.updateOne({ _id: userId }, { $set: { 'settings.storageProvider': value, updatedAt: new Date().toISOString() } });
   return { preference: value };
 }

@@ -261,8 +261,8 @@ export function LoginPage() {
           </div>
 
           <p className="tiny faint" style={{ marginTop: 16, lineHeight: 1.6 }}>
-            After signing in you can connect your Telegram account in Settings to store files in the Telegram cloud.
-            Until then everything is kept on this server's local disk, so the drive always works.
+            After signing in, connect your Telegram account in Settings. Uploads stay disabled until then, and every
+            uploaded file is stored in your Telegram cloud.
           </p>
         </div>
       </section>

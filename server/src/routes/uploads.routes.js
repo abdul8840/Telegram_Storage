@@ -31,6 +31,7 @@ import {
 } from '../services/uploadManager.js';
 import path from 'node:path';
 import fsp from 'node:fs/promises';
+import { getProviderForUser } from '../storage/index.js';
 
 const log = createLogger('uploads:http');
 const router = express.Router();
@@ -114,6 +115,9 @@ router.post(
     if (!declared) throw ApiError.badRequest('Send the file as the raw request body with a Content-Length header');
     if (declared > config.limits.maxUploadSize) throw ApiError.payload('File exceeds the maximum upload size');
 
+    // Reject before receiving even a temporary payload when Telegram is not ready.
+    await getProviderForUser(req.userId);
+
     const name = sanitizeFileName(String(req.query.name || req.headers['x-file-name'] || `upload-${randomHex(3)}`));
     const folderId = req.query.folderId ? String(req.query.folderId) : null;
     const mime = mimeOf(name, req.headers['content-type']);
@@ -143,7 +147,13 @@ router.post(
       throw ApiError.badRequest('No data received');
     }
 
-    const file = await ingestLocalFile({ userId: req.userId, filePath: tmp, name, size: written, mime, folderId });
+    let file;
+    try {
+      file = await ingestLocalFile({ userId: req.userId, filePath: tmp, name, size: written, mime, folderId });
+    } catch (err) {
+      await fsp.unlink(tmp).catch(() => {});
+      throw err;
+    }
     log.info(`simple upload accepted: ${name} (${written} bytes)`);
     res.status(202).json({ fileId: file._id, status: file.status });
   }),

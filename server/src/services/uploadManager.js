@@ -25,7 +25,7 @@ import { userBus } from '../lib/events.js';
 import { randomId } from '../lib/crypto.js';
 import { extOf, kindOf, mimeOf, sanitizeFileName, formatBytes } from '../lib/fileTypes.js';
 import { createSemaphore, clampPercent } from '../lib/concurrency.js';
-import { getProviderForUser, getProviderByName } from '../storage/index.js';
+import { getProviderForUser } from '../storage/index.js';
 import { generateThumbnails, probe, ensureWebPreview, deleteThumbnails, thumbPathsFor } from './media.js';
 import { buildFolderTree } from './folders.js';
 
@@ -68,6 +68,10 @@ export async function createSession({ userId, name, size, mime, folderId, chunkS
   if (bytes > config.limits.maxUploadSize) {
     throw ApiError.payload(`This file is ${formatBytes(bytes)}; the maximum supported size is ${formatBytes(config.limits.maxUploadSize)}`);
   }
+
+  // Fail before creating a session directory or accepting chunks. Uploads are
+  // never redirected to permanent local storage.
+  await getProviderForUser(userId);
 
   if (folderId) {
     const folder = await db.folders.findOne({ _id: folderId, userId });
@@ -266,12 +270,15 @@ export async function completeSession({ userId, uploadId }) {
     if (file) return { fileId: file._id, file };
   }
 
+  // Re-check before assembling chunks. If Telegram was disconnected while a
+  // resumable upload was in progress, preserve the chunks for a later retry.
+  const { provider, reason } = await getProviderForUser(userId);
+
   await db.uploads.updateOne({ _id: uploadId }, { $set: { status: 'assembling', updatedAt: now() } });
   emit(userId, 'upload:progress', { uploadId, phase: 'assembling', percent: 100 });
 
   const { payload } = await assemble(session);
 
-  const { provider, reason } = await getProviderForUser(userId);
   const fileId = randomId(12);
   const fileDoc = {
     _id: fileId,
@@ -320,19 +327,27 @@ export async function completeSession({ userId, uploadId }) {
  * Ingests a file that already exists on local disk (single-request uploads,
  * transcode results, imports).
  */
-export async function ingestLocalFile({ userId, filePath, name, size, mime, folderId, derivedFrom = null, providerHint = null, keepSource = false }) {
+export async function ingestLocalFile({ userId, filePath, name, size, mime, folderId, derivedFrom = null, keepSource = false }) {
   const cleanName = sanitizeFileName(name);
   const stats = size ? { size } : await fsp.stat(filePath);
   if (stats.size > config.limits.maxUploadSize) throw ApiError.payload('File exceeds the maximum upload size');
+
+  // Check Telegram before moving/copying the source into upload staging.
+  const { provider, reason } = await getProviderForUser(userId);
 
   const uploadId = randomId(10);
   const dir = sessionDir(userId, uploadId);
   await fsp.mkdir(dir, { recursive: true });
   const payload = path.join(dir, 'payload');
-  if (keepSource) await fsp.copyFile(filePath, payload);
-  else await fsp.rename(filePath, payload).catch(async () => fsp.copyFile(filePath, payload));
+  if (keepSource) {
+    await fsp.copyFile(filePath, payload);
+  } else {
+    await fsp.rename(filePath, payload).catch(async () => {
+      await fsp.copyFile(filePath, payload);
+      await fsp.unlink(filePath).catch(() => {});
+    });
+  }
 
-  const { provider, reason } = providerHint ? { provider: getProviderByName(providerHint), reason: null } : await getProviderForUser(userId);
   const fileId = randomId(12);
   const fileDoc = {
     _id: fileId,
@@ -513,7 +528,7 @@ export async function processFile(fileId, { uploadId } = {}) {
       await db.files.updateOne({ _id: fileId }, { $set: updates });
       if (uploadId) await db.uploads.updateOne({ _id: uploadId }, { $set: { status: 'ready', updatedAt: now() } });
 
-      // The bytes now live in Telegram/local storage — drop the temp payload.
+      // Telegram confirmed the upload, so drop the temporary staged payload.
       await fsp.rm(path.dirname(payloadPath), { recursive: true, force: true }).catch(() => {});
       await db.files.updateOne({ _id: fileId }, { $unset: { localPayloadPath: true } });
 

@@ -266,8 +266,8 @@ export async function restoreFiles({ userId, fileIds, folderIds = [] }) {
 }
 
 /**
- * Permanent deletion: removes the bytes from Telegram/local storage, the
- * derived images, any share links, and finally the database document.
+ * Permanent deletion removes the bytes from Telegram (or a legacy local
+ * object), the derived images, share links, and finally the database document.
  */
 export async function deleteForever({ userId, fileIds }) {
   const ids = [].concat(fileIds || []);

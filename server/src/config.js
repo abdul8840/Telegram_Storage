@@ -2,9 +2,9 @@
  * Central configuration.
  *
  * Every value can be overridden with environment variables (see /.env.example).
- * The app is designed to boot with zero configuration: without a MONGODB_URI it
- * falls back to an embedded database, and without Telegram credentials it falls
- * back to local-disk storage.
+ * The app can boot without MongoDB configuration by using an embedded
+ * database. File uploads always require a connected Telegram account; there is
+ * no permanent local-disk fallback.
  */
 import path from 'node:path';
 import fs from 'node:fs';
@@ -60,8 +60,8 @@ export const config = {
   },
 
   storage: {
-    // "telegram" | "local"
-    defaultProvider: (process.env.STORAGE_PROVIDER || 'local').toLowerCase(),
+    defaultProvider: 'telegram',
+    // Legacy local objects remain readable, but new uploads never use this.
     localStoragePath: abs(process.env.LOCAL_STORAGE_PATH || './data/storage'),
   },
 
@@ -114,7 +114,6 @@ for (const dir of [
   config.paths.tmp,
   config.paths.uploads,
   config.media.thumbPath,
-  config.storage.localStoragePath,
   config.db.embeddedPath,
 ]) {
   fs.mkdirSync(dir, { recursive: true });

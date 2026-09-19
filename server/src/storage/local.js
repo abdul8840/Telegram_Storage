@@ -1,21 +1,15 @@
 /**
- * Local-disk storage provider.
+ * Legacy local-disk storage provider.
  *
- * Used when STORAGE_PROVIDER=local (the default). It gives you a fully working
- * cloud drive — uploads, seekable streaming, previews, transcoding, sharing —
- * without a Telegram account, which makes it ideal for local development,
- * demos and offline use. Files live under LOCAL_STORAGE_PATH/<userId>/.
+ * New uploads are prohibited; these methods remain so files stored by older
+ * releases can still be read and deleted.
  */
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import config from '../config.js';
-import { createLogger } from '../lib/logger.js';
-import { extOf } from '../lib/fileTypes.js';
 import { StorageError, throwIfAborted } from './base.js';
-
-const log = createLogger('storage:local');
 
 const ROOT = config.storage.localStoragePath;
 
@@ -49,32 +43,11 @@ export const localProvider = {
     }
   },
 
-  async upload({ userId, filePath, fileName, size, onProgress, signal }) {
+  async upload({ signal }) {
     throwIfAborted(signal);
-    const dir = userDir(userId);
-    await fsp.mkdir(dir, { recursive: true });
-    const ext = extOf(fileName);
-    const relPath = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}${ext ? `.${ext}` : ''}`;
-    const dest = path.join(dir, relPath);
-
-    // Move when on the same filesystem (instant), otherwise stream-copy with
-    // progress so large videos do not block the event loop.
-    try {
-      await fsp.copyFile(filePath, dest);
-      onProgress?.({ sent: size, total: size, percent: 100 });
-      await fsp.unlink(filePath).catch(() => {});
-    } catch (err) {
-      log.warn(`copyFile failed (${err.message}) — falling back to rename`);
-      await fsp.rename(filePath, dest);
-      onProgress?.({ sent: size, total: size, percent: 100 });
-    }
-
-    const stats = await fsp.stat(dest);
-    return {
-      storage: { relPath, size: stats.size, provider: 'local' },
-      provider: 'local',
-      size: stats.size,
-    };
+    throw new StorageError('Permanent local storage is disabled. Connect Telegram to upload files.', {
+      code: 'LOCAL_STORAGE_DISABLED',
+    });
   },
 
   async createReadStream({ userId, storage, start = 0, end, signal }) {

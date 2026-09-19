@@ -808,7 +808,7 @@ export function TelegramDialog({ onClose }) {
       setStep('phone');
       setCode('');
       setPassword2fa('');
-      toast({ kind: 'info', title: 'Telegram disconnected', message: 'Uploads fall back to local storage', timeout: 4000 });
+      toast({ kind: 'info', title: 'Telegram disconnected', message: 'Uploads are paused until you reconnect Telegram', timeout: 4000 });
     } catch (err) {
       toast({ kind: 'error', title: 'Could not disconnect', message: err.message });
     } finally {

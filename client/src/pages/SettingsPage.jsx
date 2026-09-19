@@ -140,19 +140,17 @@ export function SettingsPage() {
               ) : (
                 <>
                   <div className={`callout ${storage?.active === 'telegram' ? 'callout-ok' : 'callout-brand'}`} style={{ margin: '12px 0 4px' }}>
-                    {storage?.active === 'telegram' ? <Send /> : <HardDrive />}
+                    {storage?.active === 'telegram' ? <Send /> : <TriangleAlert />}
                     <div style={{ flex: '1 1 auto' }}>
                       <div className="callout-title">
                         {storage?.active === 'telegram'
                           ? `Storing in Telegram — ${storage?.telegram?.details?.destination || 'Saved Messages'}`
-                          : 'Storing on this server’s local disk'}
+                          : 'Connect Telegram to enable uploads'}
                       </div>
                       <p className="small" style={{ marginTop: 4 }}>
                         {storage?.active === 'telegram'
                           ? `Unlimited total space, up to ${formatBytes(storage?.limits?.perTelegramFile || 2 * 1024 ** 3)} per file. Your files are private to your Telegram account.`
-                          : storage?.fellBack
-                            ? 'You asked for Telegram, but it is not connected yet — uploads fall back to local disk until you connect.'
-                            : 'Connect Telegram for free, effectively unlimited storage that follows your account anywhere.'}
+                          : 'Uploads are paused because local-disk fallback is disabled. Connect Telegram and every new file will be stored in your Telegram cloud.'}
                       </p>
                     </div>
                   </div>
@@ -185,23 +183,10 @@ export function SettingsPage() {
 
                   <div className="setting-row">
                     <div className="setting-main">
-                      <div className="setting-name">Preferred storage</div>
-                      <div className="setting-desc">New uploads go here. Telegram automatically falls back to local if it is unavailable.</div>
+                      <div className="setting-name">Storage destination</div>
+                      <div className="setting-desc">All new uploads are stored in Telegram. There is no permanent local-disk fallback.</div>
                     </div>
-                    <div className="segmented">
-                      <button
-                        data-active={(settings.storageProvider || 'telegram') === 'telegram'}
-                        onClick={() => patchSettings({ storageProvider: 'telegram' }).then(refresh)}
-                      >
-                        <Send /> Telegram
-                      </button>
-                      <button
-                        data-active={settings.storageProvider === 'local'}
-                        onClick={() => patchSettings({ storageProvider: 'local' }).then(refresh)}
-                      >
-                        <HardDrive /> Local disk
-                      </button>
-                    </div>
+                    <StatusBadge ok={storage?.active === 'telegram'} okLabel="Telegram" badLabel="Connection required" />
                   </div>
 
                   <div className="setting-row">
@@ -214,14 +199,6 @@ export function SettingsPage() {
                       </div>
                     </div>
                     <StatusBadge ok={!!storage?.limits} okLabel="Configured" badLabel="Unknown" />
-                  </div>
-
-                  <div className="setting-row">
-                    <div className="setting-main">
-                      <div className="setting-name">Local storage</div>
-                      <div className="setting-desc">{storage?.local?.details?.path || 'Server disk (fallback and offline demo mode)'}</div>
-                    </div>
-                    <StatusBadge ok={storage?.local?.ready} okLabel="Available" badLabel={storage?.local?.reason || 'Unavailable'} />
                   </div>
                 </>
               )}
@@ -708,8 +685,8 @@ export function SettingsPage() {
                   <StatusBadge ok={!!media?.thumbnails} okLabel="Yes" badLabel="No" />
                 </div>
                 <div className="row-between">
-                  <span className="small">Fell back to local disk</span>
-                  <StatusBadge ok={!storage?.fellBack} okLabel="No" badLabel="Yes" />
+                  <span className="small">Telegram uploads ready</span>
+                  <StatusBadge ok={!!storage?.uploadReady} okLabel="Yes" badLabel="Connect account" />
                 </div>
                 <div className="row-between">
                   <span className="small">Live progress (SSE)</span>

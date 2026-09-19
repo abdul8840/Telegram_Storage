@@ -3,9 +3,8 @@
  *
  *   Express  +  MongoDB (or embedded)  +  Telegram MTProto storage
  *
- * Boots with zero configuration: no Mongo? embedded DB. No Telegram account?
- * local-disk storage. Connect Telegram from the UI and the very same library
- * starts living in your Telegram account instead.
+ * Boots without MongoDB configuration by using the embedded DB. A connected
+ * Telegram account is required before the server accepts file uploads.
  */
 import fs from 'node:fs';
 import path from 'node:path';
