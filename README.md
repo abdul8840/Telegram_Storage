@@ -184,6 +184,21 @@ Everything lives in `.env` (see [`.env.example`](.env.example) for the annotated
 
 ffmpeg/ffprobe/sharp/heic are installed from npm, so **no system packages are required**.
 
+### Render deployment commands
+
+Create a **Node Web Service** with the repository root as its root directory, then use:
+
+```text
+Build Command: npm run render-build
+Start Command: npm start
+Health Check Path: /healthz
+```
+
+The root build script installs the server dependencies, explicitly includes the client `devDependencies` needed by
+Vite even when `NODE_ENV=production`, and writes the production client into `client/dist`. Do not use only
+`npm install && npm run build --prefix client`: production-only npm installs omit Vite and fail with
+`sh: vite: not found`. A matching `render.yaml` is included for Blueprint deployments.
+
 ---
 
 ## Project layout

@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: zozocloud
+    runtime: node
+    buildCommand: npm run render-build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ENABLE_TRANSCODE
+        value: "1"
+      - key: PREPARE_VIDEOS_BEFORE_UPLOAD
+        value: "1"
+      - key: MAX_CONCURRENT_TRANSCODES
+        value: "1"
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB
+        value: telegram_cloud
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SESSION_ENCRYPTION_KEY
+        generateValue: true
+      - key: TG_API_ID
+        sync: false
+      - key: TG_API_HASH
+        sync: false
+      - key: TG_PHONE
+        sync: false

@@ -1,0 +1,15 @@
+{
+  "name": "zozocloud",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ZoZoCloud production build and server orchestration",
+  "scripts": {
+    "render-build": "npm ci --prefix server --include=optional && npm ci --prefix client --include=dev && npm run build --prefix client",
+    "build": "npm run render-build",
+    "start": "npm start --prefix server",
+    "audit:production": "npm audit --prefix server --omit=dev && npm audit --prefix client --omit=dev"
+  },
+  "engines": {
+    "node": ">=20 <25"
+  }
+}
