@@ -34,12 +34,22 @@ import {
   isPdf,
   isPlayableAudio,
   isTextPreviewable,
+  splitName,
   videoCompatibility,
   KIND,
 } from '../lib/fileTypes.js';
 import { createSemaphore, clampPercent } from '../lib/concurrency.js';
 import { getProviderForUser } from '../storage/index.js';
-import { generateThumbnails, probe, ensureWebPreview, deleteThumbnails, thumbPathsFor } from './media.js';
+import {
+  generateThumbnails,
+  probe,
+  ensureWebPreview,
+  deleteThumbnails,
+  thumbPathsFor,
+  remuxToMp4,
+  transcodeToH264,
+  runVideoProcessing,
+} from './media.js';
 import { buildFolderTree } from './folders.js';
 
 const log = createLogger('uploads');
@@ -340,7 +350,17 @@ export async function completeSession({ userId, uploadId }) {
  * Ingests a file that already exists on local disk (single-request uploads,
  * transcode results, imports).
  */
-export async function ingestLocalFile({ userId, filePath, name, size, mime, folderId, derivedFrom = null, keepSource = false }) {
+export async function ingestLocalFile({
+  userId,
+  filePath,
+  name,
+  size,
+  mime,
+  folderId,
+  derivedFrom = null,
+  keepSource = false,
+  awaitReady = false,
+}) {
   const cleanName = sanitizeFileName(name);
   const stats = size ? { size } : await fsp.stat(filePath);
   if (stats.size > config.limits.maxUploadSize) throw ApiError.payload('File exceeds the maximum upload size');
@@ -397,17 +417,23 @@ export async function ingestLocalFile({ userId, filePath, name, size, mime, fold
   };
   await db.files.insertOne(fileDoc);
   emit(userId, 'file:created', { file: publicFile(fileDoc) });
-  void processFile(fileId).catch((err) => log.error(`processing failed for ${fileId}: ${err.message}`));
+  const processing = processFile(fileId);
+  if (awaitReady) {
+    const ready = await processing;
+    if (!ready?.storage) throw new Error(`Could not save ${cleanName} to Telegram`);
+    return ready;
+  }
+  void processing.catch((err) => log.error(`processing failed for ${fileId}: ${err.message}`));
   return fileDoc;
 }
 
 /**
- * The pipeline: probe → thumbnails → web preview → provider upload → ready.
+ * The pipeline: probe → optional video preparation → thumbnails → provider upload → ready.
  * Runs at most `processingSemaphore.limit` files at a time.
  */
 export async function processFile(fileId, { uploadId } = {}) {
   return processingSemaphore.run(async () => {
-    const file = await db.files.findOne({ _id: fileId });
+    let file = await db.files.findOne({ _id: fileId });
     if (!file) return null;
     const userId = file.userId;
     const controller = abortControllerFor(fileId);
@@ -425,7 +451,7 @@ export async function processFile(fileId, { uploadId } = {}) {
     try {
       if (file.status === 'ready' && file.storage) return file;
 
-      const payloadPath = file.localPayloadPath;
+      let payloadPath = file.localPayloadPath;
       if (!payloadPath || !fs.existsSync(payloadPath)) {
         throw new Error('The temporary upload data is gone; please upload the file again.');
       }
@@ -441,10 +467,109 @@ export async function processFile(fileId, { uploadId } = {}) {
         log.debug(`probe failed for ${file.name}: ${err.message}`);
       }
       if (controller.signal.aborted) throw new Error('Cancelled');
-      await db.files.updateOne({ _id: fileId }, { $set: { media, progress: 12, updatedAt: now() } });
-      emit(userId, 'file:progress', { fileId, uploadId, phase: 'analyzing', percent: 12, name: file.name });
+      await db.files.updateOne({ _id: fileId }, { $set: { media, progress: 10, updatedAt: now() } });
+      emit(userId, 'file:progress', { fileId, uploadId, phase: 'analyzing', percent: 10, name: file.name });
 
-      // 2) Derived images: grid thumbnail, Telegram thumbnail, blur-up, preview.
+      // 2) Store one browser-compatible video, not an original plus a second
+      // derivative. The source exists only in temporary upload staging. MKV
+      // with H.264 is remuxed quickly; HEVC/10-bit/unsupported codecs are
+      // encoded once to H.264/AAC before anything is sent to Telegram.
+      let preparedVideo = false;
+      if (file.kind === KIND.VIDEO && config.media.prepareVideosBeforeUpload && config.media.enableTranscode) {
+        const compatibility = videoCompatibility(file.name, media || {});
+        if (compatibility.mode !== 'native') {
+          const strategy = compatibility.strategy === 'remux' ? 'remux' : 'transcode';
+          const phase = strategy === 'remux' ? 'remuxing' : 'transcoding';
+          const { base } = splitName(file.name);
+          const preparedName = sanitizeFileName(`${base}.mp4`);
+          const preparedPath = path.join(path.dirname(payloadPath), 'browser-ready.mp4');
+          let lastPreparePercent = 10;
+
+          emit(userId, 'file:progress', {
+            fileId,
+            uploadId,
+            phase: 'conversion-queued',
+            percent: 10,
+            name: file.name,
+            strategy,
+          });
+
+          const processor = strategy === 'remux' ? remuxToMp4 : transcodeToH264;
+          const result = await runVideoProcessing(async () => {
+            if (controller.signal.aborted) throw new Error('Cancelled');
+            emit(userId, 'file:progress', { fileId, uploadId, phase, percent: 10, name: file.name, strategy });
+            return processor({
+              inputPath: payloadPath,
+              outputPath: preparedPath,
+              media: media || {},
+              signal: controller.signal,
+              ...(strategy === 'transcode' ? { maxDimension: config.media.transcodeMaxDimension } : {}),
+              onProgress: ({ percent = 0, speed = null }) => {
+                const overall = clampPercent(10 + (clampPercent(percent) / 100) * 50);
+                if (overall === lastPreparePercent) return;
+                lastPreparePercent = overall;
+                emit(userId, 'file:progress', {
+                  fileId,
+                  uploadId,
+                  phase,
+                  percent: overall,
+                  speed,
+                  name: preparedName,
+                  strategy,
+                });
+                db.files.updateOne({ _id: fileId }, { $set: { progress: overall } }).catch(() => {});
+              },
+            });
+          });
+          if (controller.signal.aborted) throw new Error('Cancelled');
+          if (result.size > config.limits.maxUploadSize) {
+            await fsp.unlink(preparedPath).catch(() => {});
+            throw new Error(
+              `The browser-compatible video is ${formatBytes(result.size)}, above the ${formatBytes(config.limits.maxUploadSize)} upload limit.`,
+            );
+          }
+
+          const preparedMedia = (await probe(preparedPath, { name: preparedName, mime: 'video/mp4' })) || {
+            ...(media || {}),
+            vcodec: 'h264',
+            acodec: 'aac',
+            pixFmt: 'yuv420p',
+            hevc: false,
+          };
+          const preparedPatch = {
+            name: preparedName,
+            ext: 'mp4',
+            mime: 'video/mp4',
+            kind: KIND.VIDEO,
+            size: result.size,
+            media: preparedMedia,
+            localPayloadPath: preparedPath,
+            checksum: null,
+            preparedFrom: {
+              name: file.name,
+              size: file.size,
+              videoCodec: media?.vcodec || null,
+              pixelFormat: media?.pixFmt || null,
+              strategy,
+            },
+            progress: 60,
+            updatedAt: now(),
+          };
+          await db.files.updateOne({ _id: fileId }, { $set: preparedPatch });
+          await fsp.unlink(payloadPath).catch(() => {});
+          payloadPath = preparedPath;
+          media = preparedMedia;
+          file = { ...file, ...preparedPatch };
+          preparedVideo = true;
+          log.info(
+            `${strategy === 'remux' ? 'prepared' : 'converted'} ${file.originalName || file.name} before Telegram upload (${formatBytes(
+              file.preparedFrom.size,
+            )} → ${formatBytes(file.size)})`,
+          );
+        }
+      }
+
+      // 3) Derived images: grid thumbnail, Telegram thumbnail, blur-up, preview.
       let thumb = null;
       let tgThumbPath = null;
       let preview = null;
@@ -465,29 +590,35 @@ export async function processFile(fileId, { uploadId } = {}) {
         log.debug(`thumbnail step failed for ${file.name}: ${err.message}`);
       }
 
-      try {
-        const webPreview = await ensureWebPreview({
-          localPath: payloadPath,
-          fileId,
-          kind: file.kind,
-          name: file.name,
-          mime: file.mime,
-          media: media || {},
-        });
-        preview = webPreview ? { path: webPreview.path, generatedAt: now() } : null;
-      } catch (err) {
-        log.debug(`web preview step failed for ${file.name}: ${err.message}`);
+      // Videos already have a poster thumbnail. Avoid decoding a second frame
+      // into another local JPEG; web preview renditions are only needed for
+      // browser-incompatible image formats.
+      if (file.kind === KIND.IMAGE) {
+        try {
+          const webPreview = await ensureWebPreview({
+            localPath: payloadPath,
+            fileId,
+            kind: file.kind,
+            name: file.name,
+            mime: file.mime,
+            media: media || {},
+          });
+          preview = webPreview ? { path: webPreview.path, generatedAt: now() } : null;
+        } catch (err) {
+          log.debug(`web preview step failed for ${file.name}: ${err.message}`);
+        }
       }
 
       if (controller.signal.aborted) throw new Error('Cancelled');
-      await db.files.updateOne({ _id: fileId }, { $set: { thumb, preview, progress: 20, updatedAt: now() } });
-      emit(userId, 'file:progress', { fileId, uploadId, phase: 'uploading', percent: 20, name: file.name });
+      const uploadStartPercent = preparedVideo ? 65 : 20;
+      await db.files.updateOne({ _id: fileId }, { $set: { thumb, preview, progress: uploadStartPercent, updatedAt: now() } });
+      emit(userId, 'file:progress', { fileId, uploadId, phase: 'uploading', percent: uploadStartPercent, name: file.name });
 
-      // 3) Hand the bytes to the storage backend.
+      // 4) Hand the single final payload to the storage backend.
       const { provider, reason } = await getProviderForUser(userId);
       const folderPath = await folderPathFor(userId, file.folderId);
       const startedAt = Date.now();
-      let lastPercent = 20;
+      let lastPercent = uploadStartPercent;
       const result = await provider.upload({
         userId,
         fileId,
@@ -502,8 +633,8 @@ export async function processFile(fileId, { uploadId } = {}) {
         folderPath,
         signal: controller.signal,
         onProgress: ({ percent = 0, sent = 0, total = file.size }) => {
-          // Map provider progress (0-100) onto the overall 20-98 band.
-          const overall = clampPercent(20 + (clampPercent(percent) / 100) * 78);
+          // Map provider progress onto the remaining overall progress band.
+          const overall = clampPercent(uploadStartPercent + (clampPercent(percent) / 100) * (98 - uploadStartPercent));
           if (overall === lastPercent) return;
           lastPercent = overall;
           const elapsed = Math.max(0.001, (Date.now() - startedAt) / 1000);
@@ -524,7 +655,7 @@ export async function processFile(fileId, { uploadId } = {}) {
 
       if (controller.signal.aborted) throw new Error('Cancelled');
 
-      // 4) Publish the finished file.
+      // 5) Publish the finished file.
       const updates = {
         status: 'ready',
         progress: 100,
@@ -625,7 +756,7 @@ async function folderPathFor(userId, folderId) {
 /** Shape returned to the browser (never exposes raw storage internals). */
 export function publicFile(file) {
   if (!file) return null;
-  const { storage, localPayloadPath, ...rest } = file;
+  const { storage, staleStorage, localPayloadPath, ...rest } = file;
   const thumbUrl = file.thumb?.available ? `/api/files/${file._id}/thumbnail` : null;
   const media = file.media || {};
   const compatibility = file.kind === KIND.VIDEO ? videoCompatibility(file.name || '', media) : null;

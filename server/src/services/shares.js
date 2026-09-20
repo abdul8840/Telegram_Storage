@@ -108,10 +108,32 @@ export async function deleteSharesForFile(fileId) {
   await db.shares.deleteMany({ fileId }).catch(() => {});
 }
 
-export function publicSharedFile(file, share) {
+/** Finds a ready browser-native derivative while keeping the shared original. */
+export async function browserCopyFor(file) {
+  if (file?.kind !== 'video' || !Array.isArray(file.derivatives)) return null;
+  for (const id of [...file.derivatives].reverse()) {
+    const candidate = await db.files.findOne({ _id: id, userId: file.userId });
+    if (!candidate || candidate.status !== 'ready' || candidate.trashed) continue;
+    if (publicFile(candidate).previewKind === 'video') return candidate;
+  }
+  return null;
+}
+
+export async function publicSharedFile(file, share) {
   const base = publicFile(file);
+  const browserCopy = await browserCopyFor(file);
+  const playback = browserCopy ? publicFile(browserCopy) : null;
   return {
     ...base,
+    ...(playback
+      ? {
+          previewKind: playback.previewKind,
+          playable: playback.playable,
+          needsTranscode: false,
+          videoCompatibility: playback.videoCompatibility,
+          browserCopyAvailable: true,
+        }
+      : {}),
     shareToken: share.token,
     streamUrl: `/api/public/${share.token}/stream`,
     downloadUrl: `/api/public/${share.token}/download`,
@@ -119,4 +141,15 @@ export function publicSharedFile(file, share) {
   };
 }
 
-export default { createShare, listShares, revokeShare, updateShare, resolvePublicShare, registerShareAccess, publicShare, deleteSharesForFile, publicSharedFile };
+export default {
+  createShare,
+  listShares,
+  revokeShare,
+  updateShare,
+  resolvePublicShare,
+  registerShareAccess,
+  publicShare,
+  deleteSharesForFile,
+  browserCopyFor,
+  publicSharedFile,
+};

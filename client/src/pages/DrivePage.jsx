@@ -205,11 +205,11 @@ export function DrivePage({ view = 'folder' }) {
           <Clapperboard />
           <div style={{ flex: '1 1 260px' }}>
             <div className="callout-title">
-              {conversionCount} video{conversionCount > 1 ? 's' : ''} need browser-compatible copies
+              {conversionCount} video{conversionCount > 1 ? 's' : ''} need browser preparation
             </div>
             <p className="small" style={{ marginTop: 4 }}>
               ZoZoCloud checks the container, video codec and audio codec separately. Compatible H.264 streams are
-              repackaged quickly; other codecs are converted while the original stays untouched.
+              repackaged quickly; other codecs are converted and safely replace the old stored video.
             </p>
           </div>
           {canTranscode ? (

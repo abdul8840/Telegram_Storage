@@ -87,14 +87,16 @@ export const config = {
     ffmpegPath: process.env.FFMPEG_PATH || '',
     ffprobePath: process.env.FFPROBE_PATH || '',
     enableTranscode: bool(process.env.ENABLE_TRANSCODE, true),
-    // Fast browser-preview copies: the untouched original remains in Telegram.
+    // Normalize incompatible videos before the only permanent copy is sent to Telegram.
+    prepareVideosBeforeUpload: bool(process.env.PREPARE_VIDEOS_BEFORE_UPLOAD, true),
+    // Fast browser-compatible output for uploads that need conversion.
     transcodePreset: oneOf(
       process.env.TRANSCODE_PRESET,
       ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium'],
-      'superfast',
+      'ultrafast',
     ),
-    transcodeCrf: Math.max(18, Math.min(32, int(process.env.TRANSCODE_CRF, 24))),
-    transcodeMaxDimension: Math.max(720, Math.min(3840, int(process.env.TRANSCODE_MAX_DIMENSION, 1920))),
+    transcodeCrf: Math.max(18, Math.min(32, int(process.env.TRANSCODE_CRF, 27))),
+    transcodeMaxDimension: Math.max(720, Math.min(3840, int(process.env.TRANSCODE_MAX_DIMENSION, 1280))),
     maxConcurrentTranscodes: Math.max(1, Math.min(4, int(process.env.MAX_CONCURRENT_TRANSCODES, 1))),
     thumbPath: abs(process.env.THUMB_PATH || './data/thumbs'),
     thumbWidth: int(process.env.THUMB_WIDTH, 480),

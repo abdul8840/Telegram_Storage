@@ -87,10 +87,18 @@ export function videoCompatibility(name, media = {}) {
   const ext = extOf(name);
   const vcodec = String(media?.vcodec || media?.videoCodec || '').toLowerCase();
   const acodec = String(media?.acodec || media?.audioCodec || '').toLowerCase();
+  const pixelFormat = String(media?.pixFmt || media?.pixelFormat || '').toLowerCase();
   const hevc = includesCodec(vcodec, HEVC_CODECS) || String(media?.codecTag || '').toLowerCase() === 'hvc1';
   const h264 = includesCodec(vcodec, H264_CODECS);
   const label = ext === 'mkv' ? 'Matroska (MKV)' : ext ? ext.toUpperCase() : 'Unknown';
-  const base = { container: ext || null, containerLabel: label, videoCodec: vcodec || null, audioCodec: acodec || null, hevc };
+  const base = {
+    container: ext || null,
+    containerLabel: label,
+    videoCodec: vcodec || null,
+    audioCodec: acodec || null,
+    pixelFormat: pixelFormat || null,
+    hevc,
+  };
 
   if (MP4_VIDEO_EXTS.has(ext)) {
     if (hevc) {
@@ -134,6 +142,18 @@ export function videoCompatibility(name, media = {}) {
   }
 
   if (ext === 'mkv') {
+    if (hevc) {
+      const highBitDepth = /(?:p10|10le|10be|p12|12le|12be)/.test(pixelFormat);
+      return {
+        ...base,
+        mode: 'convert',
+        strategy: 'transcode',
+        reasonCode: highBitDepth ? 'high-bit-depth-hevc' : 'hevc-mkv',
+        reason: highBitDepth
+          ? `${label} contains 10/12-bit HEVC video, which web browsers cannot reliably decode. ZoZoCloud will prepare a browser-safe H.264/AAC video.`
+          : `${label} contains HEVC video, which is not a reliable HTML video combination. ZoZoCloud will prepare a browser-safe H.264/AAC video.`,
+      };
+    }
     return {
       ...base,
       // Chromium/Android and other platform media stacks vary here. Let the

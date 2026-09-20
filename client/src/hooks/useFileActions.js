@@ -87,8 +87,8 @@ export function useFileActions() {
           kind: 'info',
           title: file.conversionStrategy === 'remux' ? 'Preparing MP4' : 'Conversion started',
           message: file.conversionStrategy === 'remux'
-            ? `${file.name} → Web MP4 without re-encoding the video. We'll notify you when it is saved.`
-            : `${file.name} → H.264 MP4. You can keep using the drive; we'll notify you.`,
+            ? `${file.name} → Web MP4 without re-encoding. The stored file will be replaced when the upload succeeds.`
+            : `${file.name} → H.264 MP4. The stored file will be replaced safely when conversion finishes.`,
           timeout: 6000,
         });
       } catch (err) {

@@ -339,6 +339,7 @@ export class UploadQueue {
     if (!task || task.status === 'ready') return;
     task.status = 'processing';
     task.phase = payload.phase || task.phase;
+    if (typeof payload.percent === 'number') task.percent = Math.max(0, Math.min(100, payload.percent));
     if (typeof payload.providerPercent === 'number') task.serverPercent = payload.providerPercent;
     if (payload.speed) task.serverSpeed = payload.speed;
     this.emit();

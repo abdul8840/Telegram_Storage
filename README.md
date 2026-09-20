@@ -2,7 +2,7 @@
 
 **An independent personal file library with a Telegram storage backend.** Upload documents, photos and videos — including iPhone
 HEVC/H.265 recordings — store them through your connected Telegram account (2 GB per file, 4 GB with Premium), and stream them back
-from any device with real seeking, thumbnails and one-click H.264 conversion.
+from any device with real seeking, thumbnails and automatic H.264 preparation when required.
 
 ZoZoCloud is independently operated and is not affiliated with, sponsored by or endorsed by Telegram.
 
@@ -34,12 +34,12 @@ Full-stack **MERN** app: MongoDB (with a zero-config embedded fallback), Express
 
 **Video & photos**
 - 🎬 **HTTP range streaming** — scrub through hours-long videos instantly, no download.
-- 📱 **iPhone HEVC handled properly**: the server probes every upload with ffprobe, flags H.265/HVC1 files, and offers
-  a **one-click server-side transcode to H.264 MP4** (faststart, seekable). The original is kept; the player switches
-  to the browser-friendly copy automatically when it is ready.
+- 📱 **iPhone HEVC handled properly**: the server probes every upload with ffprobe and converts H.265/HVC1 video
+  to a seekable H.264/AAC MP4 before cloud storage. The temporary source is removed and only the playable result is
+  uploaded to Telegram.
 - 🎞️ **Container-aware playback**: MKV, MP4, MOV and WebM are evaluated separately from their video/audio codecs.
-  MKV is attempted natively first on the current browser/device; if that fails, H.264-in-MKV can be remuxed to MP4
-  without re-encoding while incompatible codecs use the conversion queue.
+  Browser-safe formats pass through unchanged, H.264-in-MKV uses a fast remux, and HEVC/10-bit or unsupported codecs
+  are converted once before Telegram receives the final file.
 - 🖼 Thumbnails + 24px **LQIP blur-up placeholders** for photos *and* videos, HEIC → web preview renditions.
 - ▶️ In-browser preview for video, audio, images, PDF, text/code and Office documents (download path).
 
@@ -103,22 +103,22 @@ Telegram confirms the file. They are never retained as the permanent storage cop
 
 ---
 
-## How HEVC iPhone videos work
+## How video preparation works
 
 | Step | What happens |
 | --- | --- |
-| Upload | The `.mov` is streamed in 8 MB chunks, assembled, then pushed to Telegram. |
+| Upload | The source is streamed in resumable 8 MB chunks and assembled in temporary server storage. |
 | Probe | `ffprobe` records codec (`hevc`/`hvc1`), resolution, duration, fps, bitrate, rotation. |
-| Classify | Container, video codec and audio codec are evaluated separately. MP4/MOV HEVC is conditional; MKV uses a native platform attempt. |
-| UI | The real MKV stream opens directly first. Conversion is offered only after that browser/device reports a playback error. |
-| Convert | A background job downloads the original, re-encodes to H.264/AAC MP4 with `+faststart`, stores it as a new file linked by `derivedFrom`, and streams progress over SSE. |
-| Play | The player auto-switches to the H.264 copy and offers a chip to flip between *Original (HEVC)* and *H.264 copy*. |
+| Classify | Container, video codec, audio codec and pixel format are evaluated separately. |
+| Prepare | Compatible MP4/WebM passes through; H.264 MKV is remuxed quickly; incompatible video is converted to 720p H.264/AAC MP4 with `+faststart`. |
+| Store | Only the final video is uploaded to Telegram, then all temporary source and conversion files are removed. |
+| Play | The stored MP4 streams with HTTP ranges and seeking in current desktop and Android browsers. |
 
-If native MKV playback fails, H.264 video uses the faster remux path: ffmpeg copies the video stream into an MP4
-container and only converts audio when required. HEVC-in-MKV can still use H.264 conversion for universal playback.
+H.264 MKV uses the faster remux path: ffmpeg copies the video stream into an MP4 container and only converts audio
+when required. HEVC/10-bit video requires real re-encoding, so its preparation time depends on duration and server CPU.
 
-Browsers that *can* decode HEVC (Safari on macOS/iOS, Chrome with the HEVC extension) play the original directly —
-the UI tries native playback first and falls back to the conversion prompt on error.
+Videos stored by older releases are upgraded in place: the replacement is uploaded successfully first, the same file
+record is updated, and only then is the old Telegram message removed. This preserves folders, links and starred state.
 
 ---
 
@@ -159,8 +159,9 @@ Everything lives in `.env` (see [`.env.example`](.env.example) for the annotated
 | `TG_UPLOAD_WORKERS` / `TG_UPLOAD_PART_KB` | `3` / `512` | Telegram upload tuning |
 | `FFMPEG_PATH` / `FFPROBE_PATH` | auto | Bundled npm binaries are detected automatically |
 | `ENABLE_TRANSCODE` | `1` | Set `0` to disable HEVC → H.264 conversion |
-| `TRANSCODE_PRESET` / `TRANSCODE_CRF` | `superfast` / `24` | H.264 speed and quality trade-off |
-| `TRANSCODE_MAX_DIMENSION` | `1920` | Downscale browser copies to at most 1080p |
+| `PREPARE_VIDEOS_BEFORE_UPLOAD` | `1` | Normalize incompatible videos before the single Telegram upload |
+| `TRANSCODE_PRESET` / `TRANSCODE_CRF` | `ultrafast` / `27` | H.264 preparation speed and quality trade-off |
+| `TRANSCODE_MAX_DIMENSION` | `1280` | Downscale converted videos to at most 720p landscape |
 | `MAX_CONCURRENT_TRANSCODES` | `1` | Avoid competing ffmpeg jobs on limited CPUs |
 | `MAX_UPLOAD_SIZE` | `4294967296` | 4 GB cap (Telegram Premium) |
 | `UPLOAD_CHUNK_SIZE` | `8388608` | Client chunk size |
@@ -224,8 +225,8 @@ custom headers.
   (`proxy_buffering off` in nginx).
 - `npm --prefix client run build` before starting; Express serves `client/dist` and falls back to `index.html` for
   client-side routes.
-- Transcoding is CPU-bound: keep `ENABLE_TRANSCODE=1` on a machine with a couple of cores, or disable it and let
-  users download HEVC originals.
+- Transcoding is CPU-bound: use the `ultrafast`/720p defaults on small instances. Setting `ENABLE_TRANSCODE=0` also
+  disables pre-upload normalization, so incompatible videos will require an external player.
 - Restart-safe: interrupted uploads resume from their chunks, and queued/running jobs are recovered on boot.
 
 ## Notes & limits

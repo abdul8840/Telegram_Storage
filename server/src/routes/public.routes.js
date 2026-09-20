@@ -13,7 +13,7 @@ import config from '../config.js';
 import { ApiError, asyncHandler } from '../lib/errors.js';
 import { createLogger } from '../lib/logger.js';
 import { db } from '../db/index.js';
-import { publicShare, publicSharedFile, registerShareAccess, resolvePublicShare } from '../services/shares.js';
+import { browserCopyFor, publicShare, publicSharedFile, registerShareAccess, resolvePublicShare } from '../services/shares.js';
 import { sendLocalFile, streamFile } from '../services/streaming.js';
 import { previewPath, thumbnailPath } from '../services/files.js';
 
@@ -78,7 +78,7 @@ router.get(
       const { share, file } = await resolve(token, req, { password });
       if (share.passwordHash && password) setSharePass(res, token);
       await registerShareAccess(token);
-      res.json({ share: publicShare(share), file: publicSharedFile(file, share) });
+      res.json({ share: publicShare(share), file: await publicSharedFile(file, share) });
     } catch (err) {
       if (err.code === 'PASSWORD_REQUIRED') {
         return res.status(401).json({ error: err.message, code: 'PASSWORD_REQUIRED', share: { token, protected: true } });
@@ -98,7 +98,7 @@ router.post(
     if (share.passwordHash) setSharePass(res, token);
     await registerShareAccess(token);
     log.info(`share ${token} unlocked`);
-    res.json({ share: publicShare(share), file: publicSharedFile(file, share) });
+    res.json({ share: publicShare(share), file: await publicSharedFile(file, share) });
   }),
 );
 
@@ -107,7 +107,8 @@ const publicStream = (download) =>
     const token = String(req.params.token);
     const { share, file } = await resolve(token, req);
     await registerShareAccess(token, { download });
-    await streamFile(req, res, { file, userId: share.userId, download });
+    const streamedFile = download ? file : (await browserCopyFor(file)) || file;
+    await streamFile(req, res, { file: streamedFile, userId: share.userId, download });
   });
 
 router.get('/:token/stream', publicStream(false));

@@ -204,7 +204,7 @@ router.get(
 
 // ── processing actions ─────────────────────────────────────────────────────
 
-/** HEVC/ProRes/odd container → streamable H.264 MP4 (kept next to original). */
+/** Legacy HEVC/ProRes/odd container → streamable H.264 MP4 replacement. */
 router.post(
   '/:id/transcode',
   asyncHandler(async (req, res) => {
@@ -212,7 +212,7 @@ router.post(
     const maxDimension = Number.isFinite(requestedDimension) && requestedDimension > 0
       ? Math.max(720, Math.min(3840, Math.round(requestedDimension)))
       : config.media.transcodeMaxDimension;
-    const job = await enqueueTranscode({ userId: req.userId, fileId: req.params.id, maxDimension });
+    const job = await enqueueTranscode({ userId: req.userId, fileId: req.params.id, maxDimension, replace: true });
     res.status(202).json({ job });
   }),
 );

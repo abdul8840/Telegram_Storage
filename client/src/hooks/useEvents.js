@@ -113,7 +113,7 @@ export function useEvents(enabled = true) {
       ui.toast({
         kind: 'success',
         title: 'Conversion complete',
-        message: payload.output?.name || 'Your browser-friendly copy is ready.',
+        message: payload.output?.name || 'Your browser-friendly video is ready.',
         timeout: 6000,
       });
       refreshSoon();

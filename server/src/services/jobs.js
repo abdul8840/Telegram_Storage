@@ -16,7 +16,7 @@ import { userBus } from '../lib/events.js';
 import { randomId, randomHex } from '../lib/crypto.js';
 import { splitName, sanitizeFileName, formatBytes, videoCompatibility } from '../lib/fileTypes.js';
 import { getProviderForFile } from '../storage/index.js';
-import { getCapabilities, remuxToMp4, transcodeToH264, probe, ensureWebPreview, generateThumbnails } from './media.js';
+import { getCapabilities, remuxToMp4, transcodeToH264, probe, ensureWebPreview, generateThumbnails, runVideoProcessing } from './media.js';
 import { ingestLocalFile, publicFile } from './uploadManager.js';
 
 const log = createLogger('jobs');
@@ -61,10 +61,10 @@ export async function listJobs(userId, { limit = 25 } = {}) {
 }
 
 /**
- * Creates a browser-playable H.264/AAC MP4 copy of a video and stores it in the
- * drive next to the original (which is never modified).
+ * Creates a browser-playable H.264/AAC MP4. By default it atomically replaces
+ * the legacy source record/storage object so the library keeps one video.
  */
-export async function enqueueTranscode({ userId, fileId, maxDimension = config.media.transcodeMaxDimension, replace = false }) {
+export async function enqueueTranscode({ userId, fileId, maxDimension = config.media.transcodeMaxDimension, replace = true }) {
   const caps = await getCapabilities();
   if (!caps.transcode) {
     throw ApiError.badRequest('Transcoding needs ffmpeg on the server. Install ffmpeg (or set FFMPEG_PATH) and ENABLE_TRANSCODE=1.');
@@ -90,6 +90,7 @@ export async function enqueueTranscode({ userId, fileId, maxDimension = config.m
     options: { maxDimension, replace, strategy: videoCompatibility(file.name, file.media || {}).strategy || 'transcode' },
     output: null,
     error: null,
+    restartCount: 0,
     createdAt: now(),
     updatedAt: now(),
     finishedAt: null,
@@ -144,7 +145,8 @@ async function runTranscode(job) {
     const compatibility = videoCompatibility(file.name, media || {});
     const strategy = compatibility.strategy === 'remux' ? 'remux' : 'transcode';
     const { base } = splitName(file.name);
-    const outName = sanitizeFileName(`${base} (${strategy === 'remux' ? 'Web MP4' : 'H.264'}).mp4`);
+    const replace = job.options?.replace !== false;
+    const outName = sanitizeFileName(replace ? `${base}.mp4` : `${base} (${strategy === 'remux' ? 'Web MP4' : 'H.264'}).mp4`);
     const outPath = path.join(workDir, outName);
     const processingPhase = strategy === 'remux' ? 'remuxing' : 'transcoding';
 
@@ -153,52 +155,142 @@ async function runTranscode(job) {
 
     // 3) ffmpeg → browser-compatible MP4 with faststart (seekable immediately).
     const processor = strategy === 'remux' ? remuxToMp4 : transcodeToH264;
-    const result = await processor({
-      inputPath: source.path,
-      outputPath: outPath,
-      media: media || {},
-      signal: controller.signal,
-      ...(strategy === 'transcode' ? { maxDimension: job.options?.maxDimension || config.media.transcodeMaxDimension } : {}),
-      onProgress: ({ percent, speed }) => {
-        const overall = Math.max(16, Math.min(92, 16 + Math.round((percent || 0) * 0.76)));
-        update(jobId, { progress: overall }).catch(() => {});
-        emit(userId, 'job:progress', { jobId, fileId, phase: processingPhase, percent: overall, speed, name: job.name });
-      },
-    });
+    const result = await runVideoProcessing(() =>
+      processor({
+        inputPath: source.path,
+        outputPath: outPath,
+        media: media || {},
+        signal: controller.signal,
+        ...(strategy === 'transcode' ? { maxDimension: job.options?.maxDimension || config.media.transcodeMaxDimension } : {}),
+        onProgress: ({ percent, speed }) => {
+          const overall = Math.max(16, Math.min(92, 16 + Math.round((percent || 0) * 0.76)));
+          update(jobId, { progress: overall }).catch(() => {});
+          emit(userId, 'job:progress', { jobId, fileId, phase: processingPhase, percent: overall, speed, name: job.name });
+        },
+      }),
+    );
 
     if (controller.signal.aborted) throw new Error('Cancelled');
 
-    // 4) Store the result like any other upload (probe, thumbs, Telegram).
+    // 4) Store the result. Replacement uploads directly and then swaps the
+    // source record, avoiding even a temporary second library entry.
     await update(jobId, { phase: 'saving', progress: 93 });
     emit(userId, 'job:progress', { jobId, fileId, phase: 'saving', percent: 93, name: outName });
 
-    const created = await ingestLocalFile({
-      userId,
-      filePath: outPath,
-      name: outName,
-      size: result.size,
-      mime: 'video/mp4',
-      folderId: file.folderId || null,
-      derivedFrom: fileId,
-    });
+    let outputFile;
+    if (replace) {
+      const outputMedia = (await probe(outPath, { name: outName, mime: 'video/mp4' })) || {
+        ...(media || {}),
+        vcodec: 'h264',
+        acodec: 'aac',
+        pixFmt: 'yuv420p',
+        hevc: false,
+      };
+      const uploaded = await provider.upload({
+        userId,
+        fileId,
+        filePath: outPath,
+        fileName: outName,
+        size: result.size,
+        mimeType: 'video/mp4',
+        kind: 'video',
+        media: outputMedia,
+        thumbPath: file.thumb?.path || null,
+        folderPath: null,
+        signal: controller.signal,
+        onProgress: ({ percent = 0 }) => {
+          const overall = Math.max(93, Math.min(99, 93 + Math.round((percent / 100) * 6)));
+          update(jobId, { progress: overall }).catch(() => {});
+          emit(userId, 'job:progress', { jobId, fileId, phase: 'saving', percent: overall, name: outName });
+        },
+      });
+      const replacement = {
+        name: outName,
+        originalName: file.originalName || file.name,
+        ext: 'mp4',
+        mime: 'video/mp4',
+        kind: 'video',
+        size: result.size,
+        provider: provider.name,
+        storage: uploaded.storage,
+        // Kept only until the old remote object is confirmed deleted. If the
+        // process restarts between the swap and cleanup, recoverOnBoot retries.
+        staleStorage: file.storage,
+        media: outputMedia,
+        status: 'ready',
+        progress: 100,
+        error: null,
+        checksum: null,
+        preparedFrom: {
+          name: file.name,
+          size: file.size,
+          videoCodec: media?.vcodec || null,
+          pixelFormat: media?.pixFmt || null,
+          strategy,
+        },
+        uploadedAt: now(),
+        updatedAt: now(),
+      };
+      try {
+        await db.files.updateOne({ _id: fileId, userId }, { $set: replacement, $unset: { localPayloadPath: true } });
+      } catch (databaseError) {
+        // The library still points to the old object, so remove the newly
+        // uploaded orphan and leave the source record untouched.
+        await provider.delete({ userId, storage: uploaded.storage, fileId }).catch((cleanupError) => {
+          log.warn(`could not clean up replacement upload after database failure: ${cleanupError.message}`);
+        });
+        throw databaseError;
+      }
+      outputFile = { ...file, ...replacement };
+      emit(userId, 'file:updated', { file: publicFile(outputFile) });
+      try {
+        await provider.delete({ userId, storage: file.storage, fileId });
+        await db.files.updateOne({ _id: fileId, userId }, { $unset: { staleStorage: true } });
+        delete outputFile.staleStorage;
+      } catch (cleanupError) {
+        log.warn(`replacement saved; old Telegram cleanup will retry after restart for ${file.name}: ${cleanupError.message}`);
+      }
+    } else {
+      const created = await ingestLocalFile({
+        userId,
+        filePath: outPath,
+        name: outName,
+        size: result.size,
+        mime: 'video/mp4',
+        folderId: file.folderId || null,
+        derivedFrom: fileId,
+        awaitReady: true,
+      });
+      await db.files.updateOne({ _id: fileId }, { $addToSet: { derivatives: created._id } });
+      outputFile = created;
+    }
 
-    await db.files.updateOne({ _id: fileId }, { $addToSet: { derivatives: created._id } });
     await update(jobId, {
       status: 'done',
       phase: 'done',
       progress: 100,
       finishedAt: now(),
       output: {
-        fileId: created._id,
+        fileId: outputFile._id,
         name: outName,
         size: result.size,
         originalSize: file.size,
         savedBytes: (file.size || 0) - result.size,
         strategy,
+        replaced: replace,
       },
     });
-    emit(userId, 'job:done', { jobId, fileId, output: { fileId: created._id, name: outName, size: result.size, strategy }, name: job.name });
-    log.info(`${strategy === 'remux' ? 'remuxed' : 'transcoded'} ${file.name} → ${outName} (${formatBytes(file.size)} → ${formatBytes(result.size)})`);
+    emit(userId, 'job:done', {
+      jobId,
+      fileId,
+      output: { fileId: outputFile._id, name: outName, size: result.size, strategy, replaced: replace },
+      name: job.name,
+    });
+    log.info(
+      `${strategy === 'remux' ? 'remuxed' : 'transcoded'} ${file.name} → ${outName} (${formatBytes(file.size)} → ${formatBytes(
+        result.size,
+      )})${replace ? ' · replaced original' : ''}`,
+    );
     return { jobId };
   } catch (err) {
     const cancelled = controller.signal.aborted || /cancel/i.test(err?.message || '');
@@ -307,12 +399,85 @@ export async function enqueueRegenerate({ userId, fileId }) {
   return job;
 }
 
-/** Marks jobs left "running" by a previous process as interrupted. */
+/**
+ * Re-queues transcodes interrupted by a deploy/restart. Their temporary files
+ * are ephemeral, so the worker safely restarts from the Telegram original.
+ * Other job types cannot currently be resumed and are marked failed.
+ */
 export async function recoverOnBoot() {
+  // Finish any old-object deletion interrupted after a safe replacement swap.
+  const staleFiles = await db.files.find({ staleStorage: { $exists: true } });
+  for (const file of staleFiles) {
+    if (!file.staleStorage) continue;
+    try {
+      const provider = getProviderForFile({ ...file, storage: file.staleStorage });
+      await provider.delete({ userId: file.userId, storage: file.staleStorage, fileId: file._id });
+      await db.files.updateOne({ _id: file._id, userId: file.userId }, { $unset: { staleStorage: true } });
+    } catch (err) {
+      log.warn(`deferred cleanup still pending for ${file.name}: ${err.message}`);
+    }
+  }
+
   const running = await db.jobs.find({ status: { $in: ['running', 'queued'] } });
   for (const job of running) {
-    await update(job._id, { status: 'failed', error: 'Interrupted by a server restart', finishedAt: now(), phase: 'failed' });
+    if (job.type === 'transcode') {
+      const file = await db.files.findOne({ _id: job.fileId, userId: job.userId });
+      const compatibility = file?.kind === 'video' ? videoCompatibility(file.name, file.media || {}) : null;
+      // A restart may happen after the safe file swap but before the job's
+      // final status update. Do not encode the already-prepared replacement a
+      // second time.
+      if (file?.status === 'ready' && file.preparedFrom && compatibility?.mode === 'native') {
+        await update(job._id, {
+          status: 'done',
+          phase: 'done',
+          progress: 100,
+          error: null,
+          finishedAt: now(),
+          output: {
+            fileId: file._id,
+            name: file.name,
+            size: file.size,
+            originalSize: file.preparedFrom.size || job.size,
+            savedBytes: (file.preparedFrom.size || job.size || 0) - (file.size || 0),
+            strategy: file.preparedFrom.strategy || job.options?.strategy || 'transcode',
+            replaced: true,
+          },
+        });
+        continue;
+      }
+    }
+    const restartCount = Number(job.restartCount || 0) + (job.status === 'running' ? 1 : 0);
+    if (job.type === 'transcode' && restartCount <= 3) {
+      const resumed = {
+        ...job,
+        status: 'queued',
+        phase: 'queued',
+        progress: 0,
+        error: null,
+        restartCount,
+        finishedAt: null,
+        updatedAt: now(),
+      };
+      await update(job._id, {
+        status: resumed.status,
+        phase: resumed.phase,
+        progress: resumed.progress,
+        error: resumed.error,
+        restartCount: resumed.restartCount,
+        finishedAt: resumed.finishedAt,
+      });
+      transcodeQueue.push(resumed);
+      continue;
+    }
+    await update(job._id, {
+      status: 'failed',
+      error: job.type === 'transcode' ? 'Conversion was interrupted by repeated server restarts' : 'Interrupted by a server restart',
+      restartCount,
+      finishedAt: now(),
+      phase: 'failed',
+    });
   }
+  pumpTranscodeQueue();
   return running.length;
 }
 

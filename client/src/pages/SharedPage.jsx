@@ -165,10 +165,10 @@ export function SharedPage() {
               <div className="callout callout-warn">
                 <Clapperboard />
                 <div>
-                  <div className="callout-title">A browser-compatible copy is needed</div>
+                  <div className="callout-title">This video needs browser preparation</div>
                   <p className="small" style={{ marginTop: 4 }}>
                     {file.videoCompatibility?.reason || 'The video container or codec is not supported by this browser.'}{' '}
-                    Download the original for VLC, or ask the owner to prepare an MP4 copy.
+                    Download it for VLC, or ask the owner to optimize it as an MP4.
                   </p>
                 </div>
               </div>

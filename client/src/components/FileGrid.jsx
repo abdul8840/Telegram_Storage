@@ -121,7 +121,7 @@ export const FileCard = memo(function FileCard({ file, selected, selecting, onOp
               </span>
             ) : null}
             {file.needsTranscode ? (
-              <span className="thumb-badge" title={file.videoCompatibility?.reason || 'Needs a browser-compatible copy'}>
+              <span className="thumb-badge" title={file.videoCompatibility?.reason || 'Needs browser preparation'}>
                 <TriangleAlert style={{ width: 11, height: 11 }} /> {file.conversionStrategy === 'remux' ? 'MP4' : 'convert'}
               </span>
             ) : null}

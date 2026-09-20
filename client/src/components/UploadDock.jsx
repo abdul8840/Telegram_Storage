@@ -54,8 +54,20 @@ function statusMeta(task) {
       if (task.chunksTotal) parts.push(`${task.chunksDone}/${task.chunksTotal} parts`);
       return { text: parts.join(' · '), state: 'active', icon: null };
     }
-    case 'processing':
-      return { text: 'Processing in the cloud…', state: 'active', icon: <Spinner size={12} /> };
+    case 'processing': {
+      const phaseText = {
+        analyzing: 'Analyzing media…',
+        'conversion-queued': 'Waiting for the video converter…',
+        remuxing: 'Preparing browser MP4 before upload…',
+        transcoding: 'Converting to browser video before upload…',
+        uploading: 'Saving the final file to Telegram…',
+        saving: 'Finishing…',
+      };
+      const parts = [phaseText[task.phase] || 'Processing in the cloud…'];
+      if (typeof task.percent === 'number') parts.push(`${Math.round(task.percent)}%`);
+      if (task.serverSpeed) parts.push(formatSpeed(task.serverSpeed));
+      return { text: parts.join(' · '), state: 'active', icon: <Spinner size={12} /> };
+    }
     case 'ready':
       return { text: 'Saved to ZoZoCloud', state: 'done', icon: <CheckCircle2 size={12} /> };
     case 'paused':
@@ -88,11 +100,20 @@ export function UploadDock() {
   const summary = useMemo(() => {
     const totalBytes = active.reduce((sum, t) => sum + (t.size || 0), 0);
     const sentBytes = active.reduce((sum, t) => sum + (t.sent || 0), 0);
+    const weightedProgress = active.reduce((sum, task) => {
+      const size = task.size || 0;
+      const ratio = task.status === 'processing'
+        ? Math.max(0, Math.min(100, task.percent || 0)) / 100
+        : size
+          ? Math.max(0, Math.min(size, task.sent || 0)) / size
+          : 0;
+      return sum + size * ratio;
+    }, 0);
     return {
       totalBytes,
       sentBytes,
-      percent: totalBytes ? Math.round((sentBytes / totalBytes) * 100) : 0,
-      speed: active.reduce((sum, t) => sum + (t.speed || 0), 0),
+      percent: totalBytes ? Math.round((weightedProgress / totalBytes) * 100) : 0,
+      speed: active.reduce((sum, t) => sum + (t.status === 'processing' ? t.serverSpeed || 0 : t.speed || 0), 0),
     };
   }, [active]);
   const activeJobs = useMemo(
@@ -103,6 +124,7 @@ export function UploadDock() {
   if (!tasks.length && !activeJobs.length) return null;
 
   const uploading = tasks.filter((t) => ['queued', 'uploading', 'processing'].includes(t.status));
+  const processing = uploading.filter((t) => t.status === 'processing');
   const finished = tasks.filter((t) => ['ready', 'error', 'cancelled'].includes(t.status));
   const failed = tasks.filter((t) => t.status === 'error');
   const collapsed = !open;
@@ -116,7 +138,9 @@ export function UploadDock() {
         : 'Background jobs';
 
   const subtitle = uploading.length
-    ? `${summary.percent}% · ${formatSpeed(summary.speed)} · ${formatBytes(summary.sentBytes)} of ${formatBytes(summary.totalBytes)}`
+    ? processing.length
+      ? `${summary.percent}% · preparing the final Telegram file${summary.speed ? ` · ${formatSpeed(summary.speed)}` : ''}`
+      : `${summary.percent}% · ${formatSpeed(summary.speed)} · ${formatBytes(summary.sentBytes)} of ${formatBytes(summary.totalBytes)}`
     : activeJobs.length
       ? `${activeJobs.length} job${activeJobs.length > 1 ? 's' : ''} running`
       : failed.length
@@ -234,7 +258,7 @@ export function UploadDock() {
                     {job.type === 'transcode'
                       ? job.phase === 'remuxing' || job.options?.strategy === 'remux'
                         ? 'Preparing a browser MP4 without re-encoding video'
-                        : 'Making an H.264 copy that plays everywhere'
+                        : 'Replacing with an H.264 MP4 that plays everywhere'
                       : 'Preparing preview'}
                     {job.progress ? ` · ${Math.round(job.progress)}%` : ''}
                   </span>

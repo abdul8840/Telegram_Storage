@@ -231,9 +231,9 @@ export function SettingsPage() {
                 <div className="setting-main">
                   <div className="setting-name">Video transcoding (HEVC → H.264)</div>
                   <div className="setting-desc">
-                    Makes iPhone recordings playable in every browser. The original stays untouched.{' '}
+                    Makes incompatible uploads playable before the single permanent Telegram copy is stored.{' '}
                     {media?.transcode
-                      ? `Copies are limited to ${media.transcodeMaxDimension || 1920}px using the ${media.transcodePreset || 'fast'} preset; ${media.maxConcurrentTranscodes || 1} conversion${(media.maxConcurrentTranscodes || 1) === 1 ? '' : 's'} at a time.`
+                      ? `Converted videos are limited to ${media.transcodeMaxDimension || 1280}px using the ${media.transcodePreset || 'ultrafast'} preset; ${media.maxConcurrentTranscodes || 1} conversion${(media.maxConcurrentTranscodes || 1) === 1 ? '' : 's'} at a time.`
                       : ''}
                   </div>
                 </div>
@@ -661,9 +661,7 @@ export function SettingsPage() {
                   up to {formatBytes(storage?.limits?.perTelegramFile || 2 * 1024 ** 3)} per file.
                 </li>
                 <li>Videos stream with HTTP range requests, so seeking is instant.</li>
-                <li>
-                  HEVC/H.265 videos are converted to H.264 MP4 on demand; both copies stay in your cloud.
-                </li>
+                <li>Videos that need conversion are prepared before upload, so only the playable result is stored.</li>
                 <li>Your Telegram session string is encrypted before it is written to the database.</li>
               </ul>
             </div>

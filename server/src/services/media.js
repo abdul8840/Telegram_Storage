@@ -19,10 +19,17 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import config from '../config.js';
+import { createSemaphore } from '../lib/concurrency.js';
 import { createLogger } from '../lib/logger.js';
 import { extOf, isHeicImage, kindOf, KIND } from '../lib/fileTypes.js';
 
 const log = createLogger('media');
+const videoProcessingSemaphore = createSemaphore(config.media.maxConcurrentTranscodes);
+
+/** Shares the CPU-heavy media limit across new uploads and legacy jobs. */
+export function runVideoProcessing(task) {
+  return videoProcessingSemaphore.run(task);
+}
 
 // ── binary detection ───────────────────────────────────────────────────────
 
@@ -658,8 +665,6 @@ export async function transcodeToH264({
   const videoFilter = sourceLargestDimension > maxDimension || !sourceLargestDimension
     ? [`scale='min(${maxDimension},iw)':'min(${maxDimension},ih)':force_original_aspect_ratio=decrease`, 'format=yuv420p'].join(',')
     : 'format=yuv420p';
-  const copyAudio = String(media?.acodec || '').toLowerCase() === 'aac';
-
   const args = [
     '-nostdin',
     '-y',
@@ -676,16 +681,29 @@ export async function transcodeToH264({
     '-crf',
     String(config.media.transcodeCrf),
     '-profile:v',
-    'high',
+    'main',
     '-level',
-    '4.2',
+    '4.1',
     '-pix_fmt',
     'yuv420p',
+    '-g',
+    '60',
+    '-keyint_min',
+    '30',
     '-vf',
     videoFilter,
     '-c:a',
-    copyAudio ? 'copy' : 'aac',
-    ...(copyAudio ? [] : ['-b:a', '128k', '-ac', '2']),
+    'aac',
+    '-profile:a',
+    'aac_low',
+    '-b:a',
+    '128k',
+    '-ar',
+    '48000',
+    '-ac',
+    '2',
+    '-max_muxing_queue_size',
+    '2048',
     '-movflags',
     '+faststart',
     '-progress',
@@ -710,4 +728,15 @@ export async function deleteThumbnails(fileId) {
   await Promise.all([paths.main, paths.telegram, paths.preview].map((p) => fsp.unlink(p).catch(() => {})));
 }
 
-export default { getCapabilities, probe, generateThumbnails, ensureWebPreview, remuxToMp4, transcodeToH264, heifToJpeg, thumbPathsFor, deleteThumbnails };
+export default {
+  getCapabilities,
+  probe,
+  generateThumbnails,
+  ensureWebPreview,
+  remuxToMp4,
+  transcodeToH264,
+  runVideoProcessing,
+  heifToJpeg,
+  thumbPathsFor,
+  deleteThumbnails,
+};

@@ -27,7 +27,7 @@ const FEATURES = [
   {
     icon: Clapperboard,
     title: 'MP4, WebM and MKV playback',
-    text: 'Videos stream through one native player with seeking, codec detection and an optional compatibility copy.',
+    text: 'Videos are normalized before cloud storage, then stream through one native player with seeking.',
   },
   {
     icon: Gauge,
