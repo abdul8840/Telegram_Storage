@@ -160,7 +160,7 @@ async function startJanitor() {
 }
 
 async function main() {
-  log.info(`starting ZoZoCloud (env=${config.env}, node=${process.version})`);
+  log.info(`starting ZoZoCloud (env=${config.env}, node=${process.version}, telegramScope=${config.telegram.sessionScope})`);
   await initDb();
   const caps = await getCapabilities();
   log.info(`ffmpeg=${caps.ffmpeg.available ? 'yes' : 'no'} · thumbnails=${caps.thumbnails ? 'yes' : 'no'} · transcode=${caps.transcode ? 'yes' : 'no'} · heic=${caps.heic ? 'yes' : 'no'}`);

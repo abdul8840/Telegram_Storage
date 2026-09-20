@@ -101,6 +101,19 @@ Telegram confirms the file. They are never retained as the permanent storage cop
 > string and API hash are encrypted with `SESSION_ENCRYPTION_KEY` (falls back to `JWT_SECRET`). Only use a deployment
 > whose operator you trust, and revoke its session from Telegram's Devices settings if you stop using it.
 
+### Using localhost and Render together
+
+Telegram does not permit the same MTProto authorization key to be opened by two independent app servers. ZoZoCloud
+therefore stores a separate encrypted Telegram session for each deployment while keeping the file library shared in
+MongoDB. The deployment scope is automatic: `local` on localhost and the stable Render service ID on Render. Connect
+Telegram once in **Settings** on localhost and once at the Render URL. Both sessions may use the same Telegram account
+and Saved Messages/channel, but they must complete separate login-code flows.
+
+If `AUTH_KEY_DUPLICATED` was already reported, Telegram has invalidated that old key. Restart the updated server and
+reconnect Telegram once on each deployment. Do not copy a Telegram session string between environments. For a custom
+staging or second server, set a distinct `TG_SESSION_SCOPE` value. Keep one running service instance per scope; a
+database lease protects normal restart/deploy overlap.
+
 ---
 
 ## How video preparation works
@@ -155,6 +168,7 @@ Everything lives in `.env` (see [`.env.example`](.env.example) for the annotated
 | `SESSION_ENCRYPTION_KEY` | `JWT_SECRET` | AES key for stored Telegram sessions |
 | `MONGODB_URI` / `MONGODB_DB` | *(empty)* / `telegram_cloud` | Empty ⇒ embedded DB in `./data` |
 | `TG_API_ID` / `TG_API_HASH` / `TG_PHONE` | *(empty)* | Pre-fills the connect wizard |
+| `TG_SESSION_SCOPE` | auto (`local` or Render service ID) | Keeps concurrent deployments on separate Telegram authorization keys |
 | `TG_CHAT_TARGET` | `me` | `me` = Saved Messages, or a channel/chat id |
 | `TG_UPLOAD_WORKERS` / `TG_UPLOAD_PART_KB` | `3` / `512` | Telegram upload tuning |
 | `FFMPEG_PATH` / `FFPROBE_PATH` | auto | Bundled npm binaries are detected automatically |

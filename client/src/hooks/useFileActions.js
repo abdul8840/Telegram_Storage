@@ -80,6 +80,16 @@ export function useFileActions() {
 
   const transcode = useCallback(
     async (file, maxDimension) => {
+      const compatibility = file.videoCompatibility || {};
+      if (compatibility.mode === 'native' && (compatibility.videoCodec || file.preparedFrom)) {
+        toast({
+          kind: 'info',
+          title: 'Already browser-ready',
+          message: `${file.name} does not need another conversion.`,
+          timeout: 4200,
+        });
+        return;
+      }
       try {
         await Files.transcode(file.id, maxDimension);
         await useJobs.getState().load();

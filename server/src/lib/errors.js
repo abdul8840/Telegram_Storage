@@ -21,8 +21,8 @@ export class ApiError extends Error {
   static notFound(msg = 'Not found') {
     return new ApiError(404, msg);
   }
-  static conflict(msg = 'Conflict') {
-    return new ApiError(409, msg);
+  static conflict(msg = 'Conflict', details, code) {
+    return new ApiError(409, msg, details, code);
   }
   static payload(msg = 'Payload too large') {
     return new ApiError(413, msg);
@@ -64,6 +64,7 @@ export function errorMiddleware(err, req, res, next) {
 export function describeTelegramError(err) {
   const raw = err?.errorMessage || err?.message || String(err);
   const map = [
+    [/AUTH_KEY_DUPLICATED/i, () => 'This Telegram login was invalidated because its session key was opened by another server. Reconnect Telegram on this deployment.'],
     [/FLOOD_WAIT_(\d+)/i, (m) => `Telegram rate limit reached. Retry in ${m[1]} seconds.`],
     [/FILE_REFERENCE_EXPIRED/i, () => 'The Telegram file reference expired (it was refreshed automatically, please retry).'],
     [/AUTH_KEY_UNREGISTERED|USER_DEACTIVATED/i, () => 'The Telegram session is no longer valid. Please reconnect your account.'],

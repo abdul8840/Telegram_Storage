@@ -112,8 +112,10 @@ export function useEvents(enabled = true) {
       jobs.patch(payload.jobId, { status: 'done', progress: 100, phase: 'done', output: payload.output });
       ui.toast({
         kind: 'success',
-        title: 'Conversion complete',
-        message: payload.output?.name || 'Your browser-friendly video is ready.',
+        title: payload.output?.skipped ? 'Already browser-ready' : 'Conversion complete',
+        message: payload.output?.skipped
+          ? `${payload.output?.name || 'This video'} was not converted again.`
+          : payload.output?.name || 'Your browser-friendly video is ready.',
         timeout: 6000,
       });
       refreshSoon();

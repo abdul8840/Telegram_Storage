@@ -956,6 +956,18 @@ export function TelegramDialog({ onClose }) {
             </div>
           ) : (
             <div>
+              {status?.account?.status === 'invalid' ? (
+                <div className="callout callout-danger" style={{ marginBottom: 14 }}>
+                  <TriangleAlert />
+                  <div>
+                    <div className="callout-title">Reconnect Telegram on this deployment</div>
+                    <p className="small" style={{ marginTop: 5 }}>
+                      Telegram invalidated the old shared authorization key. Complete a new login for{' '}
+                      <strong>{status.account.deploymentScope || 'this server'}</strong>. Localhost and Render now keep separate sessions.
+                    </p>
+                  </div>
+                </div>
+              ) : null}
               {activeStep === 'phone' ? (
                 <>
                   <div className="callout callout-brand">

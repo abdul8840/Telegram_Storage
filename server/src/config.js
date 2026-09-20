@@ -33,6 +33,11 @@ const oneOf = (value, allowed, fallback) => (allowed.includes(String(value || ''
 const abs = (p, base = ROOT_DIR) => (p ? path.resolve(base, p) : base);
 
 const dataDir = abs(process.env.DATA_DIR || './data');
+const cleanScope = (value) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+const detectedTelegramScope = process.env.RENDER === 'true'
+  ? `render-${process.env.RENDER_SERVICE_ID || process.env.RENDER_SERVICE_NAME || 'service'}`
+  : 'local';
+const telegramSessionScope = cleanScope(process.env.TG_SESSION_SCOPE || detectedTelegramScope) || 'local';
 
 export const config = {
   env: process.env.NODE_ENV || 'development',
@@ -79,6 +84,9 @@ export const config = {
     maxConcurrentDownloads: int(process.env.TG_MAX_CONCURRENT_DOWNLOADS, 4),
     // seconds of idleness before a Telegram client is disconnected
     clientIdleTimeoutMs: int(process.env.TG_CLIENT_IDLE_MS, 10 * 60 * 1000),
+    // A distinct MTProto authorization key is required for every deployment
+    // that may run concurrently (for example localhost and Render).
+    sessionScope: telegramSessionScope,
     sessionName: process.env.TG_SESSION_NAME || 'ZoZoCloud',
     deviceModel: process.env.TG_DEVICE_MODEL || 'ZoZoCloud',
   },

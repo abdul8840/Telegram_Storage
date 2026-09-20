@@ -92,7 +92,11 @@ router.get(
       db.files.countDocuments({ userId: req.userId, trashed: false }),
       db.files.find({ userId: req.userId, trashed: false, status: 'ready' }, { projection: { size: 1 } }),
       db.files.countDocuments({ userId: req.userId, trashed: true }),
-      db.jobs.countDocuments({ userId: req.userId, status: { $in: ['queued', 'running'] } }),
+      db.jobs.countDocuments({
+        userId: req.userId,
+        status: { $in: ['queued', 'running'] },
+        workerScope: config.telegram.sessionScope,
+      }),
     ]);
     res.json({
       files,

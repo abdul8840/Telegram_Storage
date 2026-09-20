@@ -111,8 +111,14 @@ export function VideoStage({ file, onConvert, onDownload }) {
       setNetworkRetries(0);
       toast({
         kind: 'success',
-        title: finishedJob?.output?.strategy === 'remux' ? 'Web MP4 ready' : 'Browser video ready',
-        message: `${created.name} — playing the optimized file`,
+        title: finishedJob?.output?.skipped
+          ? 'Video was already browser-ready'
+          : finishedJob?.output?.strategy === 'remux'
+            ? 'Web MP4 ready'
+            : 'Browser video ready',
+        message: finishedJob?.output?.skipped
+          ? `${created.name} was not converted again`
+          : `${created.name} — playing the optimized file`,
         timeout: 6000,
       });
     })();
@@ -122,6 +128,7 @@ export function VideoStage({ file, onConvert, onDownload }) {
   const showConvertPrompt = !playable;
   const media = doc.media || {};
   const compatibility = doc.videoCompatibility || file.videoCompatibility || {};
+  const confirmedBrowserReady = compatibility.mode === 'native' && Boolean(compatibility.videoCodec || doc.preparedFrom);
   const canTryOriginal = ['conditional', 'attempt'].includes(compatibility.mode) || compatibility.reasonCode !== 'container';
   const isRemux = compatibility.strategy === 'remux';
   const conversionJob = job || (startingConversion ? { phase: 'queued', progress: 0 } : null);
@@ -156,6 +163,16 @@ export function VideoStage({ file, onConvert, onDownload }) {
   };
 
   const convert = () => {
+    if (confirmedBrowserReady) {
+      retryPlayback();
+      toast({
+        kind: 'info',
+        title: 'Conversion is not needed',
+        message: 'This file is already a browser-ready video. Retrying the Telegram stream instead.',
+        timeout: 5000,
+      });
+      return;
+    }
     if (onConvert) onConvert(file);
     else toast({ kind: 'info', title: 'Conversion unavailable', message: 'ffmpeg is not available on this server' });
   };
@@ -168,14 +185,14 @@ export function VideoStage({ file, onConvert, onDownload }) {
     const decoderRejected = playError && [3, 4].includes(playError.code);
     const knownIncompatible = doc.id === file.id && doc.previewKind === 'video-transcode';
     const alreadyHasCopy = Boolean(file.derivatives?.length || alts.some((item) => item.previewKind === 'video'));
-    if (!onConvert || !canTranscode || conversionJob || finishedJob || failedJob || alreadyHasCopy) return;
+    if (confirmedBrowserReady || !onConvert || !canTranscode || conversionJob || finishedJob || failedJob || alreadyHasCopy) return;
     if (!decoderRejected && !knownIncompatible) return;
     const key = `${file.id}:${file.updatedAt || ''}`;
     if (autoConvertRef.current === key) return;
     autoConvertRef.current = key;
     setStartingConversion(true);
     Promise.resolve(onConvert(file)).finally(() => setStartingConversion(false));
-  }, [alts, canTranscode, conversionJob, doc.id, doc.previewKind, failedJob, file, finishedJob, onConvert, playError]);
+  }, [alts, canTranscode, confirmedBrowserReady, conversionJob, doc.id, doc.previewKind, failedJob, file, finishedJob, onConvert, playError]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, width: '100%' }}>
@@ -258,6 +275,8 @@ export function VideoStage({ file, onConvert, onDownload }) {
               {playError
                 ? playError.code === 2
                   ? 'The video stream was interrupted'
+                  : confirmedBrowserReady
+                    ? 'Playback failed, but this video is already browser-ready'
                   : playError.code === 3
                     ? 'Your browser could not decode this video'
                     : `Your browser could not play this ${compatibility.containerLabel || 'video'}`
@@ -272,6 +291,8 @@ export function VideoStage({ file, onConvert, onDownload }) {
               {media.duration ? ` · ${Math.round(media.duration)}s` : ''}.{' '}
               {playError?.code === 2
                 ? 'The connection to Telegram ended before playback completed. Retry playback; converting the file will not fix a network interruption.'
+                : confirmedBrowserReady
+                  ? 'The stored file is already a compatible MP4/video codec combination. Retry playback; another conversion would only waste time and reduce quality.'
                 : failedJob?.error
                   ? `The previous conversion did not finish: ${failedJob.error}`
                   : compatibility.reason || 'The container or codec is not supported reliably by this browser.'}
@@ -282,11 +303,11 @@ export function VideoStage({ file, onConvert, onDownload }) {
                   <Play /> Retry playback
                 </button>
               ) : null}
-              {canTranscode && playError?.code !== 2 ? (
+              {canTranscode && playError?.code !== 2 && !confirmedBrowserReady ? (
                 <button className="btn btn-primary btn-sm" onClick={convert}>
                   <Sparkles /> {isRemux ? 'Prepare MP4 & play' : 'Convert to H.264 & play'}
                 </button>
-              ) : !canTranscode && playError?.code !== 2 ? (
+              ) : !canTranscode && playError?.code !== 2 && !confirmedBrowserReady ? (
                 <span className="badge badge-warn">
                   <AlertTriangle size={12} /> ffmpeg unavailable on this server
                 </span>

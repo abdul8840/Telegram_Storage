@@ -336,7 +336,11 @@ export async function getStats(userId) {
     db.files.find({ userId, trashed: false }),
     db.folders.countDocuments({ userId, trashed: { $ne: true } }),
     db.shares.countDocuments({ userId, revoked: false }),
-    db.jobs.find({ userId, status: { $in: ['queued', 'running'] } }),
+    db.jobs.find({
+      userId,
+      status: { $in: ['queued', 'running'] },
+      workerScope: config.telegram.sessionScope,
+    }),
   ]);
 
   const byKind = {};

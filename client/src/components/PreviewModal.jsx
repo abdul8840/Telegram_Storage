@@ -430,7 +430,7 @@ export function PreviewModal() {
               <button className="btn btn-ghost btn-icon btn-sm" title="Copy share link" onClick={() => actions.copyLink(doc)}>
                 <Link2 />
               </button>
-              {doc.kind === 'video' ? (
+              {doc.kind === 'video' && doc.videoCompatibility?.mode !== 'native' ? (
                 <button className="btn btn-ghost btn-icon btn-sm" title="Convert to H.264 MP4" onClick={() => actions.transcode(doc)}>
                   <Clapperboard />
                 </button>

@@ -32,6 +32,10 @@ export async function getProviderForUser(userId) {
     error.code = 'TG_NOT_CONNECTED';
     throw error;
   }
+  // The cheap status above protects normal page loads. Upload creation performs
+  // one real connection check so an invalidated MTProto key is detected before
+  // accepting gigabytes or spending CPU on video conversion.
+  await telegramProvider.ensureConnection({ userId });
   return { provider: telegramProvider, preference: 'telegram', reason: null };
 }
 

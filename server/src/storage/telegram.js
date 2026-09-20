@@ -178,7 +178,9 @@ export const telegramProvider = {
     if (account.status !== 'active' || !account.sessionString) {
       return {
         ready: false,
-        reason: 'Your Telegram connection is incomplete — finish the login to continue.',
+        reason: account.status === 'invalid'
+          ? `Telegram invalidated this deployment session. Reconnect Telegram for ${account.deploymentScope || 'this server'}.`
+          : `Connect Telegram for ${account.deploymentScope || 'this deployment'} to continue.`,
         code: 'TG_NOT_CONNECTED',
       };
     }
@@ -190,6 +192,7 @@ export const telegramProvider = {
           username: account.username,
           phone: maskPhone(account.phone || ''),
           isPremium: !!account.isPremium,
+          deploymentScope: account.deploymentScope,
         },
         destination: account.chatLabel || account.chatTarget || 'Saved Messages',
         chatTarget: account.chatTarget || 'me',
@@ -197,6 +200,12 @@ export const telegramProvider = {
         perFileLimit: account.isPremium ? '4 GB (Premium)' : '2 GB',
       },
     };
+  },
+
+  /** Opens/reuses the scoped Telegram client before an upload accepts bytes. */
+  async ensureConnection({ userId }) {
+    const { account } = await getClientAndAccount(userId);
+    return { ready: true, deploymentScope: account.deploymentScope };
   },
 
   /** Actively verifies the session + destination chat by opening a connection. */
@@ -213,6 +222,7 @@ export const telegramProvider = {
         phone: maskPhone(me?.phone || account.phone || ''),
         isPremium: !!me?.premium,
         id: me?.id?.toString?.() || account.tgUserId,
+        deploymentScope: account.deploymentScope,
       },
       destination: account.chatLabel || target,
     };

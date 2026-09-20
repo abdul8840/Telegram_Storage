@@ -56,8 +56,13 @@ const log = createLogger('uploads');
 
 const processingSemaphore = createSemaphore(Math.max(1, config.telegram.maxConcurrentUploads + 1));
 const activeCancellations = new Map(); // uploadId|fileId → AbortController
+const PROCESSING_SCOPE = config.telegram.sessionScope;
 
 const now = () => new Date().toISOString();
+
+function processingScopeQuery(field = 'processingScope') {
+  return { [field]: PROCESSING_SCOPE };
+}
 
 function sessionDir(userId, uploadId) {
   return path.join(config.paths.uploads, String(userId).replace(/[^a-zA-Z0-9_-]/g, '_'), String(uploadId).replace(/[^a-zA-Z0-9_-]/g, ''));
@@ -107,6 +112,7 @@ export async function createSession({ userId, name, size, mime, folderId, chunkS
     name: cleanName,
     size: bytes,
     status: { $in: ['pending', 'receiving'] },
+    ...processingScopeQuery(),
     ...(checksum ? { checksum } : {}),
   });
   if (existing) {
@@ -132,6 +138,7 @@ export async function createSession({ userId, name, size, mime, folderId, chunkS
   const doc = {
     _id: uploadId,
     userId,
+    processingScope: PROCESSING_SCOPE,
     name: cleanName,
     size: bytes,
     mime: mimeOf(cleanName, mime),
@@ -163,7 +170,7 @@ async function listParts(uploadId, userId) {
 }
 
 export async function getSession(userId, uploadId) {
-  const session = await db.uploads.findOne({ _id: uploadId, userId });
+  const session = await db.uploads.findOne({ _id: uploadId, userId, ...processingScopeQuery() });
   if (!session) throw ApiError.notFound('Upload session not found');
   return session;
 }
@@ -306,6 +313,7 @@ export async function completeSession({ userId, uploadId }) {
   const fileDoc = {
     _id: fileId,
     userId,
+    processingScope: PROCESSING_SCOPE,
     name: session.name,
     originalName: session.name,
     ext: extOf(session.name),
@@ -385,6 +393,7 @@ export async function ingestLocalFile({
   const fileDoc = {
     _id: fileId,
     userId,
+    processingScope: PROCESSING_SCOPE,
     name: cleanName,
     originalName: cleanName,
     ext: extOf(cleanName),
@@ -435,6 +444,10 @@ export async function processFile(fileId, { uploadId } = {}) {
   return processingSemaphore.run(async () => {
     let file = await db.files.findOne({ _id: fileId });
     if (!file) return null;
+    if (file.status !== 'ready' && file.processingScope && file.processingScope !== PROCESSING_SCOPE) {
+      log.warn(`ignored processing request for ${fileId}; owned by deployment ${file.processingScope}`);
+      return null;
+    }
     const userId = file.userId;
     const controller = abortControllerFor(fileId);
 
@@ -700,6 +713,9 @@ export async function retryFile({ userId, fileId }) {
   const file = await db.files.findOne({ _id: fileId, userId });
   if (!file) throw ApiError.notFound('File not found');
   if (file.status === 'ready') return publicFile(file);
+  if (file.processingScope && file.processingScope !== PROCESSING_SCOPE) {
+    throw ApiError.conflict('This upload is being processed by another deployment. Retry it from the site where it was uploaded.');
+  }
   if (!file.localPayloadPath || !fs.existsSync(file.localPayloadPath)) {
     throw ApiError.badRequest('The temporary data for this upload is gone. Please upload the file again.');
   }
@@ -712,6 +728,9 @@ export async function cancelUpload({ userId, fileId, uploadId }) {
   if (fileId) {
     const file = await db.files.findOne({ _id: fileId, userId });
     if (!file) throw ApiError.notFound('File not found');
+    if (file.status !== 'ready' && file.processingScope && file.processingScope !== PROCESSING_SCOPE) {
+      throw ApiError.conflict('This upload belongs to another deployment and cannot be cancelled from here.');
+    }
     abortControllerFor(fileId).abort();
     clearAbort(fileId);
     await db.files.updateOne({ _id: fileId }, { $set: { status: 'cancelled', error: 'Cancelled', updatedAt: now() } });
@@ -809,7 +828,11 @@ export { buildFolderTree, thumbPathsFor, deleteThumbnails };
 /** Removes stale/abandoned sessions and their partial data. */
 export async function cleanupStaleSessions({ olderThanHours = 24 } = {}) {
   const cutoff = new Date(Date.now() - olderThanHours * 3600 * 1000).toISOString();
-  const stale = await db.uploads.find({ status: { $in: ['pending', 'receiving', 'assembling'] }, updatedAt: { $lt: cutoff } });
+  const stale = await db.uploads.find({
+    status: { $in: ['pending', 'receiving', 'assembling'] },
+    updatedAt: { $lt: cutoff },
+    ...processingScopeQuery(),
+  });
   for (const session of stale) {
     await fsp.rm(sessionDir(session.userId, session._id), { recursive: true, force: true }).catch(() => {});
     await db.uploads.updateOne({ _id: session._id }, { $set: { status: 'expired', updatedAt: now() } });
@@ -823,7 +846,25 @@ export async function cleanupStaleSessions({ olderThanHours = 24 } = {}) {
  * disk — resume them automatically. Anything without payload is marked failed.
  */
 export async function recoverOnBoot() {
-  const stuck = await db.files.find({ status: { $in: ['processing', 'assembling', 'uploading'] } });
+  const scoped = await db.files.find({
+    status: { $in: ['processing', 'assembling', 'uploading'] },
+    ...processingScopeQuery(),
+  });
+  // Upgrade path for files created before processing scopes existed: only the
+  // deployment that still has the temporary payload may atomically claim it.
+  const legacy = await db.files.find({
+    status: { $in: ['processing', 'assembling', 'uploading'] },
+    processingScope: { $exists: false },
+  });
+  for (const file of legacy) {
+    if (!file.localPayloadPath || !fs.existsSync(file.localPayloadPath)) continue;
+    const claimed = await db.files.updateOne(
+      { _id: file._id, processingScope: { $exists: false } },
+      { $set: { processingScope: PROCESSING_SCOPE, updatedAt: now() } },
+    );
+    if (claimed.matchedCount) scoped.push({ ...file, processingScope: PROCESSING_SCOPE });
+  }
+  const stuck = scoped;
   let resumed = 0;
   for (const file of stuck) {
     if (file.localPayloadPath && fs.existsSync(file.localPayloadPath)) {

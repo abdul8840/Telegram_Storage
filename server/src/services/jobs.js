@@ -24,6 +24,18 @@ const now = () => new Date().toISOString();
 const controllers = new Map();
 const transcodeQueue = [];
 let activeTranscodes = 0;
+const WORKER_SCOPE = config.telegram.sessionScope;
+
+function workerScopeQuery() {
+  return { workerScope: WORKER_SCOPE };
+}
+
+function isConfirmedBrowserReady(file, compatibility = videoCompatibility(file?.name || '', file?.media || {})) {
+  if (!file || file.kind !== 'video' || compatibility.mode !== 'native') return false;
+  // Do not trust an MP4 extension by itself. A detected browser-safe codec, or
+  // our own successful pre-upload preparation marker, makes this conclusive.
+  return Boolean(compatibility.videoCodec || file.preparedFrom);
+}
 
 function pumpTranscodeQueue() {
   while (activeTranscodes < config.media.maxConcurrentTranscodes && transcodeQueue.length) {
@@ -51,13 +63,13 @@ async function update(jobId, patch) {
 }
 
 export async function getJob(userId, jobId) {
-  const job = await db.jobs.findOne({ _id: jobId, userId });
+  const job = await db.jobs.findOne({ _id: jobId, userId, ...workerScopeQuery() });
   if (!job) throw ApiError.notFound('Job not found');
   return job;
 }
 
 export async function listJobs(userId, { limit = 25 } = {}) {
-  return db.jobs.find({ userId }, { sort: { createdAt: 'desc' }, limit });
+  return db.jobs.find({ userId, ...workerScopeQuery() }, { sort: { createdAt: 'desc' }, limit });
 }
 
 /**
@@ -65,21 +77,34 @@ export async function listJobs(userId, { limit = 25 } = {}) {
  * the legacy source record/storage object so the library keeps one video.
  */
 export async function enqueueTranscode({ userId, fileId, maxDimension = config.media.transcodeMaxDimension, replace = true }) {
-  const caps = await getCapabilities();
-  if (!caps.transcode) {
-    throw ApiError.badRequest('Transcoding needs ffmpeg on the server. Install ffmpeg (or set FFMPEG_PATH) and ENABLE_TRANSCODE=1.');
-  }
   const file = await db.files.findOne({ _id: fileId, userId });
   if (!file) throw ApiError.notFound('File not found');
   if (file.status !== 'ready') throw ApiError.badRequest('This file is not ready yet');
   if (file.kind !== 'video') throw ApiError.badRequest('Only video files can be converted');
 
-  const running = await db.jobs.findOne({ userId, fileId, type: 'transcode', status: { $in: ['queued', 'running'] } });
+  const running = await db.jobs.findOne({
+    userId,
+    fileId,
+    type: 'transcode',
+    status: { $in: ['queued', 'running'] },
+    ...workerScopeQuery(),
+  });
   if (running) return running;
+
+  const compatibility = videoCompatibility(file.name, file.media || {});
+  if (isConfirmedBrowserReady(file, compatibility)) {
+    throw ApiError.conflict('This video is already browser-ready. Retry playback instead of converting it again.');
+  }
+
+  const caps = await getCapabilities();
+  if (!caps.transcode) {
+    throw ApiError.badRequest('Transcoding needs ffmpeg on the server. Install ffmpeg (or set FFMPEG_PATH) and ENABLE_TRANSCODE=1.');
+  }
 
   const job = {
     _id: randomId(10),
     userId,
+    workerScope: WORKER_SCOPE,
     fileId,
     type: 'transcode',
     status: 'queued',
@@ -87,7 +112,7 @@ export async function enqueueTranscode({ userId, fileId, maxDimension = config.m
     phase: 'queued',
     name: file.name,
     size: file.size,
-    options: { maxDimension, replace, strategy: videoCompatibility(file.name, file.media || {}).strategy || 'transcode' },
+    options: { maxDimension, replace, strategy: compatibility.strategy || 'transcode' },
     output: null,
     error: null,
     restartCount: 0,
@@ -117,6 +142,32 @@ async function runTranscode(job) {
 
     const file = await db.files.findOne({ _id: fileId, userId });
     if (!file) throw new Error('Source file disappeared');
+
+    const storedCompatibility = videoCompatibility(file.name, file.media || {});
+    if (isConfirmedBrowserReady(file, storedCompatibility)) {
+      const output = {
+        fileId: file._id,
+        name: file.name,
+        size: file.size,
+        originalSize: file.size,
+        savedBytes: 0,
+        strategy: 'none',
+        replaced: true,
+        skipped: true,
+      };
+      await update(jobId, {
+        status: 'done',
+        phase: 'done',
+        progress: 100,
+        error: null,
+        finishedAt: now(),
+        output,
+      });
+      emit(userId, 'job:done', { jobId, fileId, output, name: job.name });
+      log.info(`skipped duplicate conversion for already browser-ready video ${file.name}`);
+      return { jobId, skipped: true };
+    }
+
     const provider = getProviderForFile(file);
 
     // 1) Materialise the source locally (Telegram files are streamed down).
@@ -333,6 +384,7 @@ export async function enqueueRegenerate({ userId, fileId }) {
   const job = {
     _id: randomId(10),
     userId,
+    workerScope: WORKER_SCOPE,
     fileId,
     type: 'regenerate',
     status: 'running',
@@ -418,7 +470,7 @@ export async function recoverOnBoot() {
     }
   }
 
-  const running = await db.jobs.find({ status: { $in: ['running', 'queued'] } });
+  const running = await db.jobs.find({ status: { $in: ['running', 'queued'] }, ...workerScopeQuery() });
   for (const job of running) {
     if (job.type === 'transcode') {
       const file = await db.files.findOne({ _id: job.fileId, userId: job.userId });
@@ -426,7 +478,8 @@ export async function recoverOnBoot() {
       // A restart may happen after the safe file swap but before the job's
       // final status update. Do not encode the already-prepared replacement a
       // second time.
-      if (file?.status === 'ready' && file.preparedFrom && compatibility?.mode === 'native') {
+      if (file?.status === 'ready' && isConfirmedBrowserReady(file, compatibility)) {
+        const originalSize = file.preparedFrom?.size || job.size || file.size;
         await update(job._id, {
           status: 'done',
           phase: 'done',
@@ -437,10 +490,11 @@ export async function recoverOnBoot() {
             fileId: file._id,
             name: file.name,
             size: file.size,
-            originalSize: file.preparedFrom.size || job.size,
-            savedBytes: (file.preparedFrom.size || job.size || 0) - (file.size || 0),
-            strategy: file.preparedFrom.strategy || job.options?.strategy || 'transcode',
+            originalSize,
+            savedBytes: (originalSize || 0) - (file.size || 0),
+            strategy: 'none',
             replaced: true,
+            skipped: true,
           },
         });
         continue;

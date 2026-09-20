@@ -161,7 +161,8 @@ export function SettingsPage() {
                       <div className="setting-desc">
                         {tg?.connected
                           ? [tg.firstName, tg.username ? `@${tg.username}` : null, tg.phone].filter(Boolean).join(' · ') +
-                            (tg.isPremium ? ' · Premium (4 GB per file)' : '')
+                            (tg.isPremium ? ' · Premium (4 GB per file)' : '') +
+                            (tg.deploymentScope ? ` · Session: ${tg.deploymentScope}` : '')
                           : storage?.telegram?.reason || 'Not connected'}
                       </div>
                     </div>
@@ -662,7 +663,7 @@ export function SettingsPage() {
                 </li>
                 <li>Videos stream with HTTP range requests, so seeking is instant.</li>
                 <li>Videos that need conversion are prepared before upload, so only the playable result is stored.</li>
-                <li>Your Telegram session string is encrypted before it is written to the database.</li>
+                <li>Your Telegram session string is encrypted and isolated per deployment, so localhost and Render can run together.</li>
               </ul>
             </div>
           </section>
