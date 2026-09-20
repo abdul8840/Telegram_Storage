@@ -20,7 +20,7 @@
 }
 .btn:hover:not(:disabled) {
   background: var(--panel-3);
-  border-color: #2c3763;
+  border-color: var(--surface-hover-border);
 }
 .btn:active:not(:disabled) {
   transform: translateY(1px) scale(0.99);
@@ -67,7 +67,7 @@
 .btn-danger {
   background: var(--danger-soft);
   border-color: rgba(255, 95, 109, 0.35);
-  color: #ff8d97;
+  color: var(--danger);
 }
 .btn-danger:hover:not(:disabled) {
   background: rgba(255, 95, 109, 0.24);
@@ -161,7 +161,7 @@
   border-color: var(--danger);
 }
 .error-text {
-  color: #ff8d97;
+  color: var(--danger);
   font-size: 12px;
 }
 
@@ -309,7 +309,7 @@
 }
 .badge-brand {
   background: var(--brand-soft);
-  color: #7fd4ff;
+  color: var(--accent-text);
 }
 .badge-ok {
   background: var(--ok-soft);
@@ -321,11 +321,11 @@
 }
 .badge-danger {
   background: var(--danger-soft);
-  color: #ff8d97;
+  color: var(--danger);
 }
 .badge-violet {
   background: rgba(168, 85, 247, 0.16);
-  color: #d3a8ff;
+  color: var(--brand-2);
 }
 
 .chip {
@@ -346,12 +346,12 @@
 }
 .chip:hover {
   color: var(--text);
-  border-color: #2c3763;
+  border-color: var(--surface-hover-border);
 }
 .chip[data-active='true'] {
   background: var(--brand-soft);
   border-color: var(--brand-ring);
-  color: #8fdcff;
+  color: var(--accent-text);
 }
 .chip svg {
   width: 14px;
@@ -400,7 +400,7 @@
   position: fixed;
   inset: 0;
   z-index: 90;
-  background: rgba(4, 6, 14, 0.72);
+  background: var(--surface-overlay);
   backdrop-filter: blur(8px);
   display: grid;
   place-items: center;
@@ -483,11 +483,11 @@
   opacity: 0.85;
 }
 .menu-item-danger {
-  color: #ff8d97;
+  color: var(--danger);
 }
 .menu-item-danger:hover {
   background: var(--danger-soft);
-  color: #ffa3ab;
+  color: var(--danger);
 }
 .menu-sep {
   height: 1px;
@@ -706,23 +706,27 @@
 .callout-brand {
   background: var(--brand-soft);
   border-color: var(--brand-ring);
-  color: #cdeaff;
+  color: var(--text-soft);
 }
 .callout-warn {
   background: var(--warn-soft);
   border-color: rgba(255, 181, 71, 0.3);
-  color: #ffdca8;
+  color: var(--text-soft);
 }
 .callout-danger {
   background: var(--danger-soft);
   border-color: rgba(255, 95, 109, 0.3);
-  color: #ffc3c8;
+  color: var(--text-soft);
 }
 .callout-ok {
   background: var(--ok-soft);
   border-color: rgba(53, 208, 127, 0.3);
-  color: #b6f0d1;
+  color: var(--text-soft);
 }
+.callout-brand > svg { color: var(--brand); }
+.callout-warn > svg { color: var(--warn); }
+.callout-danger > svg { color: var(--danger); }
+.callout-ok > svg { color: var(--ok); }
 .callout-title {
   font-weight: 650;
   color: inherit;
@@ -783,7 +787,7 @@
 }
 .picker-row[data-active='true'] {
   background: var(--brand-soft);
-  color: #a5e2ff;
+  color: var(--accent-text);
   font-weight: 600;
 }
 .picker-row:disabled {

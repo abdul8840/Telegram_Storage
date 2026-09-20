@@ -1,6 +1,7 @@
 /** Router, auth guard and app bootstrap. */
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Cloud } from 'lucide-react';
 import { useAuth } from './store/auth.js';
 import { useUi } from './store/ui.js';
 import { useDrive } from './store/drive.js';
@@ -17,9 +18,11 @@ import NotFoundPage from './pages/NotFoundPage.jsx';
 
 function BootScreen({ label = 'Loading your cloud…' }) {
   return (
-    <div className="public-page">
-      <div className="row center" style={{ gap: 12, color: 'var(--muted)' }}>
-        <Spinner size={20} /> {label}
+    <div className="boot-screen">
+      <div className="boot-card" role="status" aria-live="polite">
+        <span className="boot-logo"><Cloud /></span>
+        <div className="boot-title">ZoZoCloud</div>
+        <div className="boot-label"><Spinner size={16} /> {label}</div>
       </div>
     </div>
   );

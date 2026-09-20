@@ -86,6 +86,7 @@ export function DrivePage({ view = 'folder' }) {
 
   const uiView = user?.settings?.view === 'list' ? 'list' : 'grid';
   const meta = VIEW_META[view] || VIEW_META.folder;
+  const ViewIcon = meta.icon;
 
   // Deep link from the upload dock: /drive?open=<fileId>
   useEffect(() => {
@@ -151,22 +152,25 @@ export function DrivePage({ view = 'folder' }) {
     );
 
   return (
-    <div className="content-narrow">
+    <div className="content-narrow" aria-busy={loading}>
       <Breadcrumbs view={view} folderId={effectiveFolderId} query={q} folderPath={folderPath} />
 
       <div className="page-head">
-        <div style={{ minWidth: 0 }}>
-          <h1 className="page-title truncate">{view === 'search' && q ? `Results for “${q}”` : currentTitle}</h1>
-          <p className="page-sub">
-            {loading && !items.length
-              ? 'Loading…'
-              : `${total} item${total === 1 ? '' : 's'}${totalSize && view === 'folder' && !effectiveFolderId ? ` · ${formatBytes(totalSize)} in your cloud` : ''}${
-                  view === 'trash' ? ' · restored or deleted for good' : ''
-                }`}
-          </p>
+        <div className="page-heading">
+          <span className="page-title-icon"><ViewIcon /></span>
+          <div style={{ minWidth: 0 }}>
+            <h1 className="page-title truncate">{view === 'search' && q ? `Results for “${q}”` : currentTitle}</h1>
+            <p className="page-sub">
+              {loading
+                ? items.length || folders.length ? 'Refreshing your cloud…' : 'Loading…'
+                : `${total} item${total === 1 ? '' : 's'}${totalSize && view === 'folder' && !effectiveFolderId ? ` · ${formatBytes(totalSize)} in your cloud` : ''}${
+                    view === 'trash' ? ' · restored or deleted for good' : ''
+                  }`}
+            </p>
+          </div>
         </div>
 
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <div className="page-head-actions">
           {view === 'folder' && !selection.length ? (
             <button className="btn btn-outline" onClick={() => openDialog('newFolder', { parentId: effectiveFolderId })}>
               <FolderPlus /> New folder

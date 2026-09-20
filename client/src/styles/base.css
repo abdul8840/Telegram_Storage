@@ -26,6 +26,7 @@ body {
   line-height: 1.5;
   overflow: hidden;
   text-rendering: optimizeLegibility;
+  transition: background-color 0.2s var(--ease), color 0.2s var(--ease);
 }
 
 img,
@@ -252,6 +253,6 @@ h4 {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
   animation: shimmer 1.4s infinite;
 }

@@ -20,10 +20,8 @@ export const FolderCard = memo(function FolderCard({ folder, selected, onOpen, o
       <span className="folder-icon">
         <FolderIcon />
       </span>
-      <div className="grow" style={{ minWidth: 0 }}>
-        <div className="truncate" style={{ fontSize: 13.5, fontWeight: 600 }}>
-          {folder.name}
-        </div>
+      <div className="folder-card-content">
+        <div className="folder-card-name">{folder.name}</div>
         <div className="tiny muted" style={{ marginTop: 2 }}>
           Folder{folder.fileCount ? ` · ${folder.fileCount} item${folder.fileCount === 1 ? '' : 's'}` : ''}
         </div>
@@ -178,7 +176,7 @@ export function FileGrid({ files, folders = [], selection = [], onOpen, onOpenFo
   return (
     <div className={clsx('drive', selecting && 'selecting')}>
       {folders.length ? (
-        <div className="file-grid" style={{ marginBottom: 14 }}>
+        <div className="folder-grid">
           {folders.map((folder) => (
             <FolderCard
               key={folder._id}

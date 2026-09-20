@@ -10,8 +10,8 @@ import {
   HardDrive,
   Image as ImageIcon,
   Link2,
-  Search as SearchIcon,
   Star,
+  WifiOff,
 } from 'lucide-react';
 import Sidebar from './Sidebar.jsx';
 import TopBar from './TopBar.jsx';
@@ -36,7 +36,6 @@ const MOBILE_NAV = [
   { to: '/videos', label: 'Videos', icon: Film, match: (p) => p === '/videos' },
   { to: '/shared', label: 'Shared', icon: Link2, match: (p) => p === '/shared' },
   { to: '/starred', label: 'Starred', icon: Star, match: (p) => p === '/starred' },
-  { to: '/search', label: 'Search', icon: SearchIcon, match: (p) => p === '/search' },
 ];
 
 function MobileNav() {
@@ -63,6 +62,7 @@ export function AppShell() {
   const pendingFolder = useRef(null);
 
   const [folderMenu, setFolderMenu] = useState({ open: false, anchor: null, node: null });
+  const [online, setOnline] = useState(() => navigator.onLine !== false);
 
   const sidebarOpen = useUi((s) => s.sidebarOpen);
   const setSidebarOpen = useUi((s) => s.setSidebarOpen);
@@ -86,6 +86,20 @@ export function AppShell() {
     drive.loadStats();
     drive.loadCapabilities();
   }, []);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setOnline(true);
+      toast({ kind: 'success', title: 'Back online', message: 'Cloud operations can continue.', timeout: 2800 });
+    };
+    const handleOffline = () => setOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [toast]);
 
   // Any component can ask for the file picker through the ui store.
   useEffect(() => {
@@ -182,8 +196,13 @@ export function AppShell() {
         <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />
       ) : null}
 
-      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+      <div className="main">
         <TopBar onOpenSidebar={() => setSidebarOpen(true)} />
+        {!online ? (
+          <div className="network-banner" role="alert">
+            <WifiOff /> You are offline. Uploads will wait and can be resumed when your connection returns.
+          </div>
+        ) : null}
         <main className="content">
           <ErrorBoundary key={pathname}>
             <Outlet />

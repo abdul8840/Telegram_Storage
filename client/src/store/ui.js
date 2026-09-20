@@ -11,6 +11,12 @@ const initialTheme = () => {
   return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
 };
 
+const applyDocumentTheme = (theme) => {
+  if (typeof document === 'undefined') return;
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+};
+
 export const useUi = create((set, get) => ({
   theme: initialTheme(),
   sidebarOpen: false,
@@ -26,8 +32,7 @@ export const useUi = create((set, get) => ({
   density: localStorage.getItem('tgc_density') || 'comfortable',
 
   applyTheme() {
-    document.documentElement.dataset.theme = get().theme;
-    document.documentElement.style.colorScheme = get().theme;
+    applyDocumentTheme(get().theme);
   },
 
   toggleTheme() {
@@ -38,6 +43,7 @@ export const useUi = create((set, get) => ({
   },
 
   setTheme(theme) {
+    if (!['light', 'dark'].includes(theme)) return;
     localStorage.setItem(THEME_KEY, theme);
     set({ theme });
     get().applyTheme();

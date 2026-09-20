@@ -80,7 +80,9 @@ export const useDrive = create((set, get) => ({
       });
     } catch (err) {
       if (get().queryKey() !== key) return;
-      set({ loading: false, error: err.message, items: [], folders: [], total: 0 });
+      // Keep the last successful view visible during a transient outage. The
+      // inline error offers retry without turning the whole drive blank.
+      set({ loading: false, error: err.message, stale: true });
     }
   },
 

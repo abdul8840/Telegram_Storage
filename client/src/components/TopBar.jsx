@@ -47,7 +47,8 @@ export function TopBar({ onOpenSidebar }) {
   const user = useAuth((s) => s.user);
   const logout = useAuth((s) => s.logout);
   const theme = useUi((s) => s.theme);
-  const toggleTheme = useUi((s) => s.toggleTheme);
+  const setTheme = useUi((s) => s.setTheme);
+  const toast = useUi((s) => s.toast);
   const openDialog = useUi((s) => s.openDialog);
   const requestUpload = useUi((s) => s.requestUpload);
 
@@ -73,9 +74,23 @@ export function TopBar({ onOpenSidebar }) {
     if (pathname === '/search') navigate('/drive');
   };
 
-  const setView = (next) => {
-    useAuth.getState().updateProfile({ settings: { view: next } }).catch(() => {});
+  const setView = async (next) => {
+    const previous = uiView;
     useAuth.setState((s) => ({ user: { ...s.user, settings: { ...(s.user?.settings || {}), view: next } } }));
+    try {
+      await useAuth.getState().updateProfile({ settings: { view: next } });
+    } catch (err) {
+      useAuth.setState((s) => ({ user: { ...s.user, settings: { ...(s.user?.settings || {}), view: previous } } }));
+      toast({ kind: 'error', title: 'Could not save view', message: err.message });
+    }
+  };
+
+  const changeTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    useAuth.getState().updateProfile({ settings: { theme: next } }).catch((err) => {
+      toast({ kind: 'warn', title: 'Theme changed on this device', message: `Profile sync failed: ${err.message}` });
+    });
   };
 
   return (
@@ -121,15 +136,15 @@ export function TopBar({ onOpenSidebar }) {
           </button>
         </div>
 
-        <button className="btn btn-icon" ref={sortAnchor} onClick={() => setSortOpen((v) => !v)} aria-label="Sort" title="Sort">
+        <button className="btn btn-icon topbar-sort" ref={sortAnchor} onClick={() => setSortOpen((v) => !v)} aria-label="Sort" title="Sort">
           <ArrowDownUp />
         </button>
 
-        <button className="btn btn-ghost btn-icon" onClick={toggleTheme} aria-label="Toggle theme" title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
+        <button className="btn btn-ghost btn-icon topbar-theme" onClick={changeTheme} aria-label="Toggle theme" title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
           {theme === 'dark' ? <Sun /> : <Moon />}
         </button>
 
-        <button className="avatar" ref={accountAnchor} onClick={() => setAccountOpen((v) => !v)} aria-label="Account menu" title={user?.email}>
+        <button className="avatar topbar-avatar" ref={accountAnchor} onClick={() => setAccountOpen((v) => !v)} aria-label="Account menu" title={user?.email}>
           {initials(user?.name || user?.email || '?')}
         </button>
       </div>
@@ -174,7 +189,7 @@ export function TopBar({ onOpenSidebar }) {
         <MenuItem icon={Send} onClick={() => { navigate('/settings'); setTimeout(() => openDialog('telegram'), 150); }} onClose={() => setAccountOpen(false)}>
           Telegram connection
         </MenuItem>
-        <MenuItem icon={theme === 'dark' ? Sun : Moon} onClick={toggleTheme} onClose={() => setAccountOpen(false)}>
+        <MenuItem icon={theme === 'dark' ? Sun : Moon} onClick={changeTheme} onClose={() => setAccountOpen(false)}>
           {theme === 'dark' ? 'Light mode' : 'Dark mode'}
         </MenuItem>
         <MenuSeparator />
